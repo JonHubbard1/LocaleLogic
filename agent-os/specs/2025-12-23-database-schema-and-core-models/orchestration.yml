@@ -1,0 +1,25 @@
+task_groups:
+  - name: Dependencies and Service Infrastructure
+    claude_code_subagent: api-engineer
+    standards:
+      - all
+  - name: Geography Lookup Tables and Migrations
+    claude_code_subagent: database-engineer
+    standards:
+      - all
+  - name: Properties Tables and Indexing Strategy
+    claude_code_subagent: database-engineer
+    standards:
+      - all
+  - name: Boundary Cache and Data Version Tracking
+    claude_code_subagent: database-engineer
+    standards:
+      - all
+  - name: Eloquent Models with Relationships
+    claude_code_subagent: database-engineer
+    standards:
+      - all
+  - name: Lookup Table Seeders and Table Swap Service
+    claude_code_subagent: database-engineer
+    standards:
+      - all

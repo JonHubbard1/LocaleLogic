@@ -12,6 +12,17 @@ LocaleLogic is a UK geography microservice and REST API that provides postcode a
 3. **Parish/Town Councillor Support** — Parish councillors cannot access the electoral register, so this service lets them query property counts by postcode within their parish for planning leaflet deliveries
 4. **Boundary Visualisation** — Fetch GeoJSON boundary polygons for wards, parishes, or divisions to display "this is your patch" on a map
 
+## Code Generation
+
+Use Ollama tools for all code generation, refactoring, and test writing:
+- ollama_generate_code / ollama_generate_code_with_context for new code
+- ollama_refactor_code for improvements
+- ollama_fix_code for bug fixes
+- ollama_write_tests for tests
+- ollama_review_file for code reviews
+
+Use Claude's own reasoning for planning, architecture, and complex problem-solving.
+
 ## Data Sources
 
 - **ONSUD (ONS UPRN Directory)** — 41 million property records for Great Britain, updated 6-weekly, containing UPRN, OS Grid coordinates, and geography codes
