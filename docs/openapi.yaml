@@ -1,0 +1,343 @@
+openapi: 3.0.3
+info:
+  title: LocaleLogic Postcode Lookup API
+  description: |
+    Comprehensive UK postcode lookup API providing geographic coordinates,
+    administrative geography hierarchies, and property data.
+
+    ## Authentication
+    All endpoints require Bearer token authentication using Laravel Sanctum.
+
+    ## Rate Limiting
+    Currently no rate limiting is applied (trust-based system).
+  version: 1.0.0
+  contact:
+    email: api-support@localelogic.uk
+
+servers:
+  - url: https://dev.localelogic.uk/api/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Postcodes
+    description: Postcode lookup operations
+
+paths:
+  /postcodes/{postcode}:
+    get:
+      tags:
+        - Postcodes
+      summary: Get postcode data
+      description: |
+        Retrieve comprehensive geographic and administrative data for a UK postcode.
+
+        The postcode parameter accepts any format (uppercase, lowercase, with/without spaces)
+        and will be normalized automatically.
+      operationId: getPostcode
+      parameters:
+        - name: postcode
+          in: path
+          required: true
+          description: UK postcode in any format (e.g., SW1A1AA, SW1A 1AA, sw1a 1aa)
+          schema:
+            type: string
+            example: SW1A1AA
+        - name: include
+          in: query
+          required: false
+          description: Additional data to include in response
+          schema:
+            type: string
+            enum: [uprns]
+            example: uprns
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostcodeResponse'
+              examples:
+                basic:
+                  summary: Basic response without UPRNs
+                  value:
+                    data:
+                      postcode: "SW1A 1AA"
+                      coordinates:
+                        wgs84:
+                          latitude: 51.495407
+                          longitude: -0.141515
+                        os_grid:
+                          easting: 529000
+                          northing: 179000
+                      geography:
+                        ward:
+                          code: "E05013806"
+                          name: "St James's"
+                        county_electoral_division: null
+                        parish:
+                          code: "E04012690"
+                          name: "Melksham Without"
+                        local_authority_district:
+                          code: "E09000033"
+                          name: "Westminster"
+                        constituency:
+                          code: "E14000639"
+                          name: "Cities of London and Westminster"
+                        region:
+                          code: "E12000007"
+                          name: "London"
+                        police_force_area:
+                          code: "E23000001"
+                          name: "Metropolitan Police"
+                      property_count: 142
+                    meta:
+                      api_version: "1.0"
+                      timestamp: "2025-12-24T00:44:18+00:00"
+                with_uprns:
+                  summary: Response with UPRNs included
+                  value:
+                    data:
+                      postcode: "SW1A 1AA"
+                      coordinates:
+                        wgs84:
+                          latitude: 51.495407
+                          longitude: -0.141515
+                        os_grid:
+                          easting: 529000
+                          northing: 179000
+                      geography:
+                        ward:
+                          code: "E05013806"
+                          name: "St James's"
+                        county_electoral_division: null
+                        parish:
+                          code: "E04012690"
+                          name: "Melksham Without"
+                        local_authority_district:
+                          code: "E09000033"
+                          name: "Westminster"
+                        constituency:
+                          code: "E14000639"
+                          name: "Cities of London and Westminster"
+                        region:
+                          code: "E12000007"
+                          name: "London"
+                        police_force_area:
+                          code: "E23000001"
+                          name: "Metropolitan Police"
+                      property_count: 142
+                      uprns: [100023336161, 100023336162, 100023336163]
+                    meta:
+                      api_version: "1.0"
+                      timestamp: "2025-12-24T00:44:18+00:00"
+        '401':
+          description: Unauthenticated - Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedError'
+        '404':
+          description: Postcode not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostcodeNotFoundError'
+        '422':
+          description: Validation error - Invalid postcode format or query parameters
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/InvalidPostcodeError'
+                  - $ref: '#/components/schemas/ValidationError'
+              examples:
+                invalid_postcode:
+                  summary: Invalid postcode format
+                  value:
+                    error:
+                      code: "INVALID_POSTCODE"
+                      message: "Invalid postcode format: does not match UK postcode pattern"
+                invalid_parameter:
+                  summary: Invalid include parameter
+                  value:
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Invalid request parameters"
+                      details:
+                        include:
+                          - "The include parameter only accepts: uprns"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: Laravel Sanctum API token
+
+  schemas:
+    PostcodeResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            postcode:
+              type: string
+              description: Normalized postcode in standard format
+              example: "SW1A 1AA"
+            coordinates:
+              type: object
+              properties:
+                wgs84:
+                  type: object
+                  properties:
+                    latitude:
+                      type: number
+                      format: float
+                      description: WGS84 latitude (EPSG:4326)
+                      example: 51.495407
+                    longitude:
+                      type: number
+                      format: float
+                      description: WGS84 longitude (EPSG:4326)
+                      example: -0.141515
+                os_grid:
+                  type: object
+                  properties:
+                    easting:
+                      type: integer
+                      description: British National Grid easting (EPSG:27700)
+                      example: 529000
+                    northing:
+                      type: integer
+                      description: British National Grid northing (EPSG:27700)
+                      example: 179000
+            geography:
+              type: object
+              properties:
+                ward:
+                  $ref: '#/components/schemas/GeographyItem'
+                county_electoral_division:
+                  $ref: '#/components/schemas/GeographyItem'
+                parish:
+                  $ref: '#/components/schemas/GeographyItem'
+                local_authority_district:
+                  $ref: '#/components/schemas/GeographyItem'
+                constituency:
+                  $ref: '#/components/schemas/GeographyItem'
+                region:
+                  $ref: '#/components/schemas/GeographyItem'
+                police_force_area:
+                  $ref: '#/components/schemas/GeographyItem'
+            property_count:
+              type: integer
+              description: Number of properties in this postcode
+              example: 142
+            uprns:
+              type: array
+              nullable: true
+              description: Array of UPRN integers (only when ?include=uprns)
+              items:
+                type: integer
+              example: [100023336161, 100023336162]
+        meta:
+          type: object
+          properties:
+            api_version:
+              type: string
+              description: API version number
+              example: "1.0"
+            timestamp:
+              type: string
+              format: date-time
+              description: ISO 8601 timestamp of the response
+              example: "2025-12-24T00:44:18+00:00"
+
+    GeographyItem:
+      type: object
+      nullable: true
+      properties:
+        code:
+          type: string
+          description: GSS (Government Statistical Service) code
+          example: "E05013806"
+        name:
+          type: string
+          description: Human-readable name
+          example: "St James's"
+
+    UnauthenticatedError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Unauthenticated."
+
+    PostcodeNotFoundError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "POSTCODE_NOT_FOUND"
+            message:
+              type: string
+              example: "No properties found for postcode ZZ99 1ZZ"
+
+    InvalidPostcodeError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INVALID_POSTCODE"
+            message:
+              type: string
+              example: "Invalid postcode format: does not match UK postcode pattern"
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+
+    InternalError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INTERNAL_ERROR"
+            message:
+              type: string
+              example: "An unexpected error occurred"

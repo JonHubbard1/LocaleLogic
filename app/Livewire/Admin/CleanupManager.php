@@ -29,16 +29,16 @@ class CleanupManager extends Component
     {
         try {
             // Check staging table
-            $this->stagingRecords = DB::table('onsud_staging')->count();
+            $this->stagingRecords = DB::table('properties_staging')->count();
         } catch (\Exception $e) {
             $this->stagingRecords = 0;
         }
 
         try {
             // Check old table
-            if (DB::getSchemaBuilder()->hasTable('onsud_old')) {
+            if (DB::getSchemaBuilder()->hasTable('properties_old')) {
                 $this->oldTableExists = true;
-                $this->oldTableRecords = DB::table('onsud_old')->count();
+                $this->oldTableRecords = DB::table('properties_old')->count();
             } else {
                 $this->oldTableExists = false;
                 $this->oldTableRecords = 0;
@@ -63,7 +63,7 @@ class CleanupManager extends Component
         $this->working = true;
 
         try {
-            Artisan::call('onsud:cleanup', ['--staging' => true]);
+            Artisan::call('onsud:cleanup', ['--staging' => true, '--force' => true]);
             $this->loadStats();
             $this->dispatch('cleanup-success', message: 'Staging table cleared successfully');
         } catch (\Exception $e) {
@@ -78,7 +78,7 @@ class CleanupManager extends Component
         $this->working = true;
 
         try {
-            Artisan::call('onsud:cleanup', ['--old' => true]);
+            Artisan::call('onsud:cleanup', ['--old' => true, '--force' => true]);
             $this->loadStats();
             $this->dispatch('cleanup-success', message: 'Old table dropped successfully');
         } catch (\Exception $e) {
@@ -93,7 +93,7 @@ class CleanupManager extends Component
         $this->working = true;
 
         try {
-            Artisan::call('onsud:cleanup', ['--files' => true]);
+            Artisan::call('onsud:cleanup', ['--files' => true, '--force' => true]);
             $this->loadStats();
             $this->dispatch('cleanup-success', message: 'Downloaded files removed successfully');
         } catch (\Exception $e) {
@@ -108,7 +108,7 @@ class CleanupManager extends Component
         $this->working = true;
 
         try {
-            Artisan::call('onsud:cleanup', ['--all' => true]);
+            Artisan::call('onsud:cleanup', ['--all' => true, '--force' => true]);
             $this->loadStats();
             $this->dispatch('cleanup-success', message: 'All cleanup operations completed successfully');
         } catch (\Exception $e) {

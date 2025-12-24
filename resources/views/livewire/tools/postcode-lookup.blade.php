@@ -102,7 +102,7 @@
             <flux:card>
                 <flux:heading>Quick Actions</flux:heading>
                 <div class="mt-4 space-y-2">
-                    <flux:button href="{{ route('admin.imports') }}" variant="ghost" class="w-full justify-start">
+                    <flux:button href="{{ route('admin.import') }}" variant="ghost" class="w-full justify-start">
                         <flux:icon.arrow-up-tray /> Import ONSUD Data
                     </flux:button>
                     <flux:button href="{{ route('admin.versions') }}" variant="ghost" class="w-full justify-start">

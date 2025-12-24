@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\PostcodeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,4 +14,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// API routes will be added here as per roadmap items 4-8
+// API v1 Routes - Require Sanctum Authentication
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    // Postcode Lookup
+    Route::get('postcodes/{postcode}', [PostcodeController::class, 'show']);
+});

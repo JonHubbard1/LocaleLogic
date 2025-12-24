@@ -3,6 +3,7 @@
 use App\Livewire\Admin\CleanupManager;
 use App\Livewire\Admin\DataVersionTable;
 use App\Livewire\Admin\ImportManager;
+use App\Livewire\Admin\ImportProgress;
 use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
 use App\Livewire\Tools\PostcodeLookup;
@@ -30,7 +31,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Admin routes
     Route::prefix('admin')->name('admin.')->group(function () {
-        Route::get('/imports', ImportManager::class)->name('imports');
+        Route::get('/import', ImportManager::class)->name('import');
+        Route::get('/import/progress/{import}', ImportProgress::class)->name('import.progress');
         Route::get('/versions', DataVersionTable::class)->name('versions');
         Route::get('/cleanup', CleanupManager::class)->name('cleanup');
     });

@@ -96,7 +96,7 @@
                                 <flux:button
                                     wire:click="cleanupStaging"
                                     wire:confirm="Are you sure you want to clear the staging table? This will remove {{ number_format($stagingRecords) }} records."
-                                    variant="warning"
+                                    variant="danger"
                                     size="sm"
                                     icon="trash"
                                     :disabled="$working"
@@ -201,7 +201,7 @@
                 <flux:card class="mt-6">
                     <flux:heading>Quick Actions</flux:heading>
                     <div class="mt-4 space-y-2">
-                        <flux:button href="{{ route('admin.imports') }}" variant="ghost" class="w-full justify-start">
+                        <flux:button href="{{ route('admin.import') }}" variant="ghost" class="w-full justify-start">
                             <flux:icon.arrow-up-tray /> New Import
                         </flux:button>
                         <flux:button href="{{ route('admin.versions') }}" variant="ghost" class="w-full justify-start">

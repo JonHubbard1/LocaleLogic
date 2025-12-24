@@ -1,0 +1,220 @@
+{
+  "info": {
+    "name": "LocaleLogic Postcode Lookup API",
+    "description": "Collection for testing the LocaleLogic Postcode Lookup API.\n\n## Setup\n1. Import this collection into Postman\n2. Set the `api_token` variable with your Bearer token\n3. Optionally set the `base_url` variable (defaults to https://dev.localelogic.uk/api/v1)\n\n## Authentication\nAll requests use Bearer token authentication. The token is stored in the collection variable `api_token`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Postcodes",
+      "item": [
+        {
+          "name": "Get Postcode - Basic",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/SW1A1AA",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "SW1A1AA"]
+            },
+            "description": "Get comprehensive postcode data without UPRNs.\n\n**Returns:**\n- Normalized postcode\n- WGS84 and OS Grid coordinates\n- Full geography hierarchy\n- Property count"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Postcode - With UPRNs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/SW1A1AA?include=uprns",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "SW1A1AA"],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "uprns",
+                  "description": "Include UPRN array in response"
+                }
+              ]
+            },
+            "description": "Get postcode data including an array of UPRNs (Unique Property Reference Numbers).\n\n**Additional data:**\n- Array of UPRN integers for all properties in the postcode"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Postcode - Lowercase",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/sw1a 1aa",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "sw1a 1aa"]
+            },
+            "description": "Demonstrates that postcodes are normalized automatically.\n\nInput: `sw1a 1aa` (lowercase with space)\nOutput: `SW1A 1AA` (normalized)\n\nAll formats are accepted:\n- SW1A1AA\n- SW1A 1AA\n- sw1a1aa\n- sw1a 1aa"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Postcode - Different Format",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/M11AA",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "M11AA"]
+            },
+            "description": "Example with a different postcode format (single letter area code).\n\nDemonstrates:\n- Short postcodes (padded to 8 characters internally)\n- Single letter area codes (M, W, etc.)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for postcode lookups"
+    },
+    {
+      "name": "Error Examples",
+      "item": [
+        {
+          "name": "401 - Unauthenticated",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/SW1A1AA",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "SW1A1AA"]
+            },
+            "description": "**Expected Response: 401 Unauthenticated**\n\n```json\n{\n  \"message\": \"Unauthenticated.\"\n}\n```\n\nThis request has no Authorization header, so it will fail with 401."
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "404 - Postcode Not Found",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/ZZ991ZZ",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "ZZ991ZZ"]
+            },
+            "description": "**Expected Response: 404 Not Found**\n\n```json\n{\n  \"error\": {\n    \"code\": \"POSTCODE_NOT_FOUND\",\n    \"message\": \"No properties found for postcode ZZ99 1ZZ\"\n  }\n}\n```\n\nZZ991ZZ is a valid format but doesn't exist in the database."
+          },
+          "response": []
+        },
+        {
+          "name": "422 - Invalid Postcode Format",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/INVALID",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "INVALID"]
+            },
+            "description": "**Expected Response: 422 Unprocessable Entity**\n\n```json\n{\n  \"error\": {\n    \"code\": \"INVALID_POSTCODE\",\n    \"message\": \"Invalid postcode format: does not match UK postcode pattern\"\n  }\n}\n```\n\nINVALID doesn't match the UK postcode pattern."
+          },
+          "response": []
+        },
+        {
+          "name": "422 - Invalid Include Parameter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/postcodes/SW1A1AA?include=invalid",
+              "host": ["{{base_url}}"],
+              "path": ["postcodes", "SW1A1AA"],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "invalid",
+                  "description": "Invalid value - only 'uprns' is accepted"
+                }
+              ]
+            },
+            "description": "**Expected Response: 422 Unprocessable Entity**\n\n```json\n{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Invalid request parameters\",\n    \"details\": {\n      \"include\": [\n        \"The include parameter only accepts: uprns\"\n      ]\n    }\n  }\n}\n```\n\nThe include parameter only accepts 'uprns'."
+          },
+          "response": []
+        }
+      ],
+      "description": "Examples of error responses for testing error handling"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://dev.localelogic.uk/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "api_token",
+      "value": "YOUR_API_TOKEN_HERE",
+      "type": "string"
+    }
+  ]
+}

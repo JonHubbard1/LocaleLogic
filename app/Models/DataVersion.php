@@ -34,15 +34,28 @@ class DataVersion extends Model
         'file_hash',
         'status',
         'notes',
+        'progress_percentage',
+        'status_message',
+        'current_file',
+        'total_files',
+        'files',
+        'log_file',
+        'stats',
     ];
 
     /**
-     * The attributes that should be cast.
+     * Get the attributes that should be cast.
      *
-     * @var array<string, string>
+     * @return array<string, string>
      */
-    protected $casts = [
-        'release_date' => 'date',
-        'imported_at' => 'datetime',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'release_date' => 'date',
+            'imported_at' => 'datetime',
+            'progress_percentage' => 'decimal:2',
+            'files' => 'array',
+            'stats' => 'array',
+        ];
+    }
 }

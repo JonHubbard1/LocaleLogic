@@ -13,7 +13,8 @@ class CleanupOnsudCommand extends Command
         {--staging : Clear staging table only}
         {--old : Drop old properties table}
         {--files : Remove downloaded ONSUD files}
-        {--all : Perform all cleanup operations}';
+        {--all : Perform all cleanup operations}
+        {--force : Skip confirmation prompts}';
 
     protected $description = 'Clean up ONSUD import artifacts';
 
@@ -23,6 +24,25 @@ class CleanupOnsudCommand extends Command
     {
         parent::__construct();
         $this->tableSwapService = $tableSwapService;
+    }
+
+    /**
+     * Safely confirm an action, handling both interactive and non-interactive contexts
+     */
+    private function safeConfirm(string $question, bool $default = false): bool
+    {
+        // If --force option is set, always proceed
+        if ($this->option('force')) {
+            return true;
+        }
+
+        // Check if running in interactive mode (has STDIN)
+        if (defined('STDIN') && stream_isatty(STDIN)) {
+            return $this->confirm($question, $default);
+        }
+
+        // Non-interactive mode (e.g., web request) - use default
+        return $default;
     }
 
     public function handle(): int
@@ -69,7 +89,7 @@ class CleanupOnsudCommand extends Command
         $count = DB::table('properties_staging')->count();
 
         if ($count > 0) {
-            if ($this->confirm("Clear {$count} records from properties_staging table?", true)) {
+            if ($this->safeConfirm("Clear {$count} records from properties_staging table?", true)) {
                 DB::statement('SET CONSTRAINTS ALL DEFERRED');
                 DB::table('properties_staging')->truncate();
                 DB::statement('SET CONSTRAINTS ALL IMMEDIATE');
@@ -87,7 +107,7 @@ class CleanupOnsudCommand extends Command
         if (DB::getSchemaBuilder()->hasTable('properties_old')) {
             $count = DB::table('properties_old')->count();
 
-            if ($this->confirm("Drop properties_old table with {$count} records?", true)) {
+            if ($this->safeConfirm("Drop properties_old table with {$count} records?", true)) {
                 $this->tableSwapService->dropOldTable();
                 $this->info("Old properties table dropped ({$count} records removed)");
             } else {
@@ -106,7 +126,7 @@ class CleanupOnsudCommand extends Command
             $size = $this->getDirectorySize($onsudPath);
             $sizeFormatted = $this->formatBytes($size);
 
-            if ($this->confirm("Remove ONSUD files directory ({$sizeFormatted})?", true)) {
+            if ($this->safeConfirm("Remove ONSUD files directory ({$sizeFormatted})?", true)) {
                 File::deleteDirectory($onsudPath);
                 $this->info("ONSUD files removed ({$sizeFormatted} freed)");
             } else {

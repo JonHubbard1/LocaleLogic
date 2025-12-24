@@ -1,6 +1,3 @@
-import forms from '@tailwindcss/forms';
-import typography from '@tailwindcss/typography';
-
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
@@ -11,10 +8,4 @@ export default {
         './vendor/livewire/flux/stubs/resources/views/**/*.blade.php',
         './vendor/livewire/flux-pro/stubs/resources/views/**/*.blade.php',
     ],
-
-    theme: {
-        extend: {},
-    },
-
-    plugins: [forms, typography],
 };

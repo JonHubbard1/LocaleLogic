@@ -8,7 +8,7 @@
                     <flux:heading>ONSUD Import History</flux:heading>
                     <flux:subheading>View and manage all ONSUD data versions</flux:subheading>
                 </div>
-                <flux:button href="{{ route('admin.imports') }}" icon="arrow-up-tray">
+                <flux:button href="{{ route('admin.import') }}" icon="arrow-up-tray">
                     New Import
                 </flux:button>
             </div>
@@ -114,7 +114,7 @@
                     <flux:icon.inbox class="mx-auto h-12 w-12 text-gray-400" />
                     <flux:heading size="lg" class="mt-2">No data versions found</flux:heading>
                     <flux:subheading>Import your first ONSUD dataset to get started</flux:subheading>
-                    <flux:button href="{{ route('admin.imports') }}" class="mt-4">
+                    <flux:button href="{{ route('admin.import') }}" class="mt-4">
                         Import Now
                     </flux:button>
                 </div>

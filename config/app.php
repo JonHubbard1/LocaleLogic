@@ -41,6 +41,9 @@ return [
         App\Providers\AppServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
 
+        // Laravel Sanctum
+        Laravel\Sanctum\SanctumServiceProvider::class,
+
         // Livewire & Flux
         Livewire\LivewireServiceProvider::class,
         Flux\FluxServiceProvider::class,

@@ -36,12 +36,15 @@ class BoundaryCache extends Model
     ];
 
     /**
-     * The attributes that should be cast.
+     * Get the attributes that should be cast.
      *
-     * @var array<string, string>
+     * @return array<string, string>
      */
-    protected $casts = [
-        'fetched_at' => 'datetime',
-        'expires_at' => 'datetime',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'fetched_at' => 'datetime',
+            'expires_at' => 'datetime',
+        ];
+    }
 }

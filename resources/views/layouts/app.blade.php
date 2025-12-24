@@ -29,7 +29,7 @@
             <flux:navlist.item icon="home" href="{{ route('dashboard') }}">Dashboard</flux:navlist.item>
 
             <flux:navlist.group expandable heading="Admin" icon="cog-6-tooth">
-                <flux:navlist.item href="{{ route('admin.imports') }}">ONSUD Imports</flux:navlist.item>
+                <flux:navlist.item href="{{ route('admin.import') }}">ONSUD Imports</flux:navlist.item>
                 <flux:navlist.item href="{{ route('admin.versions') }}">Data Versions</flux:navlist.item>
                 <flux:navlist.item href="{{ route('admin.cleanup') }}">System Cleanup</flux:navlist.item>
             </flux:navlist.group>

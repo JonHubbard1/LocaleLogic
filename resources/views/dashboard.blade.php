@@ -44,7 +44,7 @@
                 <flux:card>
                     <flux:heading>Quick Actions</flux:heading>
                     <div class="mt-4 flex flex-wrap gap-4">
-                        <flux:button href="{{ route('admin.imports') }}" icon="arrow-up-tray">Import ONSUD Data</flux:button>
+                        <flux:button href="{{ route('admin.import') }}" icon="arrow-up-tray">Import ONSUD Data</flux:button>
                         <flux:button href="{{ route('tools.lookup') }}" icon="magnifying-glass" variant="ghost">Lookup Postcode</flux:button>
                         <flux:button href="{{ route('admin.versions') }}" icon="clock" variant="ghost">View History</flux:button>
                     </div>
