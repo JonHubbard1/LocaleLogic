@@ -1,21 +1,53 @@
+# Dependencies
 /node_modules
-/public/hot
-/public/storage
-/storage/*.key
 /vendor
+
+# Environment & Config
 .env
 .env.backup
 .env.production
+.mcp.json
+boost.json
+
+# Laravel Cache & Storage
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep
+/storage/framework/cache/*
+!/storage/framework/cache/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/app/livewire-tmp/
+/storage/app/onsud/*.zip
+/storage/app/onsud/extracted/
+/storage/*.key
+
+# Public Assets
+/public/hot
+/public/storage
+/public/build/assets/*
+!/public/build/assets/.gitkeep
+/public/.user.ini
+/public/phpinfo-test.php
+
+# Test & Development
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
 auth.json
 npm-debug.log
 yarn-error.log
+
+# IDE
 /.fleet
 /.idea
 /.vscode
 /.claude
+
+# Images (optional - remove if you need to commit images)
 *.png
 *.jpg
 *.jpeg
