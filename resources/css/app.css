@@ -1,8 +1,8 @@
-@import '../../vendor/livewire/flux/dist/flux.css';
+@import 'tailwindcss';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.js";
+
+@import '../../vendor/livewire/flux/dist/flux.css';
 
 /* Flux disclosure styles - manually added for Tailwind v3 compatibility */
 /* These rules are NOT in a @layer to prevent Tailwind from purging them */
