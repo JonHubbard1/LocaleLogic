@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Exceptions\PostcodeNotFoundException;
+use App\Models\BoundaryName;
 use App\Models\Property;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 /**
@@ -55,7 +57,7 @@ class PostcodeLookupService
      * Normalize postcode to uppercase with standard spacing
      *
      * @param string $postcode Raw postcode
-     * @return string Normalized postcode (uppercase, 8 chars with space)
+     * @return string Normalized postcode (uppercase with space before last 3 chars)
      */
     public function normalizePostcode(string $postcode): string
     {
@@ -70,8 +72,8 @@ class PostcodeLookupService
             $postcode = substr($postcode, 0, -3) . ' ' . substr($postcode, -3);
         }
 
-        // Pad to 8 characters (database format)
-        return str_pad($postcode, 8, ' ', STR_PAD_RIGHT);
+        // Return without padding - database values are stored without trailing spaces
+        return $postcode;
     }
 
     /**
@@ -98,27 +100,14 @@ class PostcodeLookupService
     }
 
     /**
-     * Query properties with eager-loaded geography relationships
-     *
-     * Optimized query using eager loading to avoid N+1 problems.
-     * Only loads non-null relationships.
+     * Query properties for the given postcode
      *
      * @param string $postcode Normalized postcode
      * @return Collection<Property>
      */
     private function getPropertiesWithGeography(string $postcode): Collection
     {
-        return Property::where('pcds', $postcode)
-            ->with([
-                'ward',
-                'countyElectoralDivision',
-                'parish',
-                'localAuthorityDistrict',
-                'constituency',
-                'region',
-                'policeForceArea',
-            ])
-            ->get();
+        return Property::where('pcds', $postcode)->get();
     }
 
     /**
@@ -144,8 +133,8 @@ class PostcodeLookupService
     /**
      * Format geography data for API response
      *
-     * Extracts codes and names from related geography models.
-     * Handles nullable relationships gracefully.
+     * Extracts codes from property record and looks up human-readable names
+     * from the boundary_names table.
      *
      * @param Property $property Representative property
      * @return array Formatted geography data
@@ -153,62 +142,60 @@ class PostcodeLookupService
     private function formatGeography(Property $property): array
     {
         return [
-            'ward' => $this->formatGeographyItem(
-                $property->ward,
-                'wd25cd',
-                'wd25nm'
-            ),
-            'county_electoral_division' => $this->formatGeographyItem(
-                $property->countyElectoralDivision,
-                'ced25cd',
-                'ced25nm'
-            ),
-            'parish' => $this->formatGeographyItem(
-                $property->parish,
-                'parncp25cd',
-                'parncp25nm'
-            ),
-            'local_authority_district' => $this->formatGeographyItem(
-                $property->localAuthorityDistrict,
-                'lad25cd',
-                'lad25nm'
-            ),
-            'constituency' => $this->formatGeographyItem(
-                $property->constituency,
-                'pcon24cd',
-                'pcon24nm'
-            ),
-            'region' => $this->formatGeographyItem(
-                $property->region,
-                'rgn25cd',
-                'rgn25nm'
-            ),
-            'police_force_area' => $this->formatGeographyItem(
-                $property->policeForceArea,
-                'pfa23cd',
-                'pfa23nm'
-            ),
+            'ward' => $this->formatGeographyCode($property->wd25cd, 'wards'),
+            'county_electoral_division' => $this->formatGeographyCode($property->ced25cd, 'ced'),
+            'parish' => $this->formatGeographyCode($property->parncp25cd, 'parish'),
+            'local_authority_district' => $this->formatGeographyCode($property->lad25cd, 'lad'),
+            'constituency' => $this->formatGeographyCode($property->pcon24cd, 'constituencies'),
+            'region' => $this->formatGeographyCode($property->rgn25cd, 'region'),
+            'police_force_area' => $this->formatGeographyCode($property->pfa23cd),
         ];
     }
 
     /**
-     * Format a single geography item
+     * Format a geography code with human-readable name lookup
      *
-     * @param object|null $model Geography model
-     * @param string $codeField Code field name
-     * @param string $nameField Name field name
-     * @return array|null Formatted item or null
+     * @param string|null $code GSS code
+     * @param string|null $boundaryType Boundary type for name lookup (e.g., 'wards', 'parish', 'lad')
+     * @return array|null Formatted item with code and name (if available)
      */
-    private function formatGeographyItem($model, string $codeField, string $nameField): ?array
+    private function formatGeographyCode(?string $code, ?string $boundaryType = null): ?array
     {
-        if (!$model) {
+        if (!$code) {
             return null;
         }
 
-        return [
-            'code' => $model->$codeField ?? null,
-            'name' => $model->$nameField ?? null,
+        $code = trim($code);
+        $name = null;
+        $nameWelsh = null;
+
+        // Look up name from boundary_names table if boundary type is provided
+        if ($boundaryType) {
+            $cacheKey = "boundary_name:{$boundaryType}:{$code}";
+
+            $boundaryData = Cache::remember($cacheKey, 3600, function () use ($code, $boundaryType) {
+                return BoundaryName::where('boundary_type', $boundaryType)
+                    ->where('gss_code', $code)
+                    ->first(['name', 'name_welsh']);
+            });
+
+            if ($boundaryData) {
+                $name = $boundaryData->name;
+                $nameWelsh = $boundaryData->name_welsh;
+            }
+        }
+
+        $result = [
+            'code' => $code,
+            'name' => $name,
         ];
+
+        // Only include Welsh name if it has a non-empty value
+        if ($nameWelsh && $nameWelsh !== '') {
+            $result['name_welsh'] = $nameWelsh;
+        }
+
+        return $result;
     }
 
     /**
