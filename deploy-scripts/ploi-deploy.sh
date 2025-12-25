@@ -28,13 +28,23 @@ echo "📥 Pulling latest code..."
 git pull origin main
 
 ##############################################################################
-# 3. COMPOSER DEPENDENCIES
+# 3. FLUX UI PRO AUTHENTICATION
+##############################################################################
+echo "🔑 Configuring Flux UI Pro authentication..."
+# Add Flux Pro repository (if not already in composer.json)
+composer config repositories.flux-pro composer https://composer.fluxui.dev --no-interaction
+
+# Set authentication credentials for Flux UI Pro
+composer config http-basic.composer.fluxui.dev jon@jonhubbard.org 7b668b2b-338d-4618-a9cb-a1eae76b2725 --no-interaction
+
+##############################################################################
+# 4. COMPOSER DEPENDENCIES
 ##############################################################################
 echo "🎼 Installing Composer dependencies..."
 composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
 ##############################################################################
-# 4. NPM DEPENDENCIES & BUILD
+# 5. NPM DEPENDENCIES & BUILD
 ##############################################################################
 echo "📦 Installing NPM dependencies..."
 npm ci --production=false
@@ -43,7 +53,7 @@ echo "🏗️  Building frontend assets..."
 npm run build
 
 ##############################################################################
-# 5. STORAGE & CACHE DIRECTORIES
+# 6. STORAGE & CACHE DIRECTORIES
 ##############################################################################
 echo "📁 Ensuring storage directories exist..."
 mkdir -p storage/app/onsud
@@ -56,14 +66,14 @@ mkdir -p storage/logs
 mkdir -p bootstrap/cache
 
 ##############################################################################
-# 6. PERMISSIONS
+# 7. PERMISSIONS
 ##############################################################################
 echo "🔐 Setting correct permissions..."
 chown -R ploi:ploi storage bootstrap/cache
 chmod -R 775 storage bootstrap/cache
 
 ##############################################################################
-# 7. ENVIRONMENT & CACHE
+# 8. ENVIRONMENT & CACHE
 ##############################################################################
 echo "🔧 Clearing caches..."
 php artisan config:clear
@@ -72,13 +82,13 @@ php artisan view:clear
 php artisan cache:clear
 
 ##############################################################################
-# 8. MIGRATIONS
+# 9. MIGRATIONS
 ##############################################################################
 echo "🗄️  Running database migrations..."
 php artisan migrate --force --no-interaction
 
 ##############################################################################
-# 9. OPTIMIZE
+# 10. OPTIMIZE
 ##############################################################################
 echo "⚡ Optimizing application..."
 php artisan config:cache
@@ -89,13 +99,13 @@ php artisan view:cache
 # php artisan event:cache
 
 ##############################################################################
-# 10. STORAGE LINK
+# 11. STORAGE LINK
 ##############################################################################
 echo "🔗 Creating storage link..."
 php artisan storage:link || true
 
 ##############################################################################
-# 11. RESTART SERVICES
+# 12. RESTART SERVICES
 ##############################################################################
 echo "🔄 Restarting queue workers..."
 php artisan queue:restart
@@ -104,13 +114,13 @@ php artisan queue:restart
 # php artisan octane:reload
 
 ##############################################################################
-# 12. MAINTENANCE MODE OFF
+# 13. MAINTENANCE MODE OFF
 ##############################################################################
 echo "✅ Disabling maintenance mode..."
 php artisan up
 
 ##############################################################################
-# 13. COMPLETION
+# 14. COMPLETION
 ##############################################################################
 echo ""
 echo "✨ Deployment complete!"
