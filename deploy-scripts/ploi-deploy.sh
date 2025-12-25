@@ -25,7 +25,22 @@ php artisan down --retry=60 --render="errors::503" || true
 # 2. GIT PULL (Ploi does this automatically, but we'll be explicit)
 ##############################################################################
 echo "📥 Pulling latest code..."
+
+# Stash any local changes to prevent merge conflicts
+if ! git diff-index --quiet HEAD --; then
+    echo "⚠️  Local changes detected, stashing..."
+    git stash push -u -m "Auto-stash before deployment $(date +%Y%m%d-%H%M%S)"
+    STASHED=true
+else
+    STASHED=false
+fi
+
+# Pull latest code
 git pull origin main
+
+# Optionally restore stashed changes (usually we want to discard them in production)
+# Uncomment the next line if you want to restore local changes after pull
+# if [ "$STASHED" = true ]; then git stash pop; fi
 
 ##############################################################################
 # 3. FLUX UI PRO AUTHENTICATION
