@@ -49,7 +49,7 @@ class PostcodeLookupService
             'coordinates' => $this->formatCoordinates($representative),
             'geography' => $this->formatGeography($representative),
             'property_count' => $properties->count(),
-            'uprns' => $includeUprns ? $properties->pluck('uprn')->toArray() : null,
+            'uprns' => $includeUprns ? $this->formatUprns($properties) : null,
         ];
     }
 
@@ -196,6 +196,23 @@ class PostcodeLookupService
         }
 
         return $result;
+    }
+
+    /**
+     * Format UPRNs with coordinates for map plotting
+     *
+     * @param Collection<Property> $properties Properties to format
+     * @return array Array of UPRNs with lat/lng coordinates
+     */
+    private function formatUprns(Collection $properties): array
+    {
+        return $properties->map(function (Property $property) {
+            return [
+                'uprn' => $property->uprn,
+                'latitude' => (float) $property->lat,
+                'longitude' => (float) $property->lng,
+            ];
+        })->values()->toArray();
     }
 
     /**

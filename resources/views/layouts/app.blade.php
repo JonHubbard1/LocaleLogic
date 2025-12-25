@@ -6,6 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'LocaleLogic' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @stack('styles')
 </head>
 <body class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <flux:sidebar sticky stashable class="bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700">
@@ -38,6 +39,7 @@
             <flux:navlist.group expandable heading="Tools" icon="wrench-screwdriver">
                 <flux:navlist.item href="{{ route('tools.lookup') }}">Postcode Lookup</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.map') }}">Property Map</flux:navlist.item>
+                <flux:navlist.item href="{{ route('tools.postcode-map') }}">Postcode Map Demo</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.boundaries') }}">Boundary Viewer</flux:navlist.item>
             </flux:navlist.group>
         </flux:navlist>
@@ -75,5 +77,6 @@
             });
         });
     </script>
+    @stack('scripts')
 </body>
 </html>

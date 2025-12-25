@@ -8,6 +8,7 @@ use App\Livewire\Admin\ImportProgress;
 use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
 use App\Livewire\Tools\PostcodeLookup;
+use App\Livewire\Tools\PostcodeMap;
 use App\Livewire\Tools\PropertyMap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +44,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('tools')->name('tools.')->group(function () {
         Route::get('/lookup', PostcodeLookup::class)->name('lookup');
         Route::get('/map', PropertyMap::class)->name('map');
+        Route::get('/postcode-map', PostcodeMap::class)->name('postcode-map');
         Route::get('/boundaries', BoundaryViewer::class)->name('boundaries');
     });
 });
