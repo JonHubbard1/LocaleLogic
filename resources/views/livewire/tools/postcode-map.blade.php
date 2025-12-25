@@ -83,6 +83,15 @@
                                     <span class="text-purple-900 dark:text-purple-200 font-medium">Route Mode</span>
                                 </div>
                             @endif
+
+                            @if($offsetLat != 0 || $offsetLng != 0)
+                                <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30">
+                                    <flux:icon.check-circle class="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                                    <span class="text-green-900 dark:text-green-200 font-medium">
+                                        Calibration Active (~{{ number_format(sqrt(pow($offsetLat * 111000, 2) + pow($offsetLng * 70000, 2)), 1) }}m offset)
+                                    </span>
+                                </div>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -225,8 +234,8 @@ if (coordinates.length > 0) {
 
         // Listen for map update events from Livewire
         Livewire.on('updateMap', (event) => {
-            const { uprns, mapView, postcode } = event;
-            updateMap(uprns, mapView, postcode);
+            const { uprns, mapView, postcode, offsetLat, offsetLng } = event;
+            updateMap(uprns, mapView, postcode, offsetLat, offsetLng);
         });
 
         // Listen for clear map event
@@ -235,7 +244,7 @@ if (coordinates.length > 0) {
         });
     });
 
-    function updateMap(uprns, mapView, postcode) {
+    function updateMap(uprns, mapView, postcode, offsetLat = 0, offsetLng = 0) {
         // Clear existing layers
         markersLayer.clearLayers();
         routeLayer.clearLayers();
@@ -244,16 +253,26 @@ if (coordinates.length > 0) {
             return;
         }
 
+        // Apply user's saved coordinate offset
+        const applyOffset = (lat, lng) => ({
+            lat: lat + parseFloat(offsetLat),
+            lng: lng + parseFloat(offsetLng)
+        });
+
         if (mapView === 'markers') {
             // Example 1: Plot all properties as individual markers
             uprns.forEach(property => {
-                L.marker([property.latitude, property.longitude])
+                const adjusted = applyOffset(property.latitude, property.longitude);
+                L.marker([adjusted.lat, adjusted.lng])
                     .bindPopup(`<strong>UPRN:</strong> ${property.uprn}<br><strong>Postcode:</strong> ${postcode}`)
                     .addTo(markersLayer);
             });
         } else {
             // Example 2: Create a walking route connecting all properties
-            const coordinates = uprns.map(p => [p.latitude, p.longitude]);
+            const coordinates = uprns.map(p => {
+                const adjusted = applyOffset(p.latitude, p.longitude);
+                return [adjusted.lat, adjusted.lng];
+            });
 
             // Draw the polyline route
             L.polyline(coordinates, {
@@ -304,8 +323,11 @@ if (coordinates.length > 0) {
             });
         }
 
-        // Fit map bounds to show all markers
-        const bounds = uprns.map(p => [p.latitude, p.longitude]);
+        // Fit map bounds to show all markers (with offset applied)
+        const bounds = uprns.map(p => {
+            const adjusted = applyOffset(p.latitude, p.longitude);
+            return [adjusted.lat, adjusted.lng];
+        });
         map.fitBounds(bounds, { padding: [50, 50] });
     }
 

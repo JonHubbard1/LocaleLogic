@@ -40,6 +40,7 @@
                 <flux:navlist.item href="{{ route('tools.lookup') }}">Postcode Lookup</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.map') }}">Property Map</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.postcode-map') }}">Postcode Map Demo</flux:navlist.item>
+                <flux:navlist.item href="{{ route('tools.calibrate') }}">Coordinate Calibration</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.boundaries') }}">Boundary Viewer</flux:navlist.item>
             </flux:navlist.group>
         </flux:navlist>

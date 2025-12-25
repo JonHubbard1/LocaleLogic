@@ -29,7 +29,13 @@ class CoordinateConverter
     {
         $this->proj4 = new Proj4php();
 
-        // Initialize British National Grid projection (EPSG:27700)
+        // Initialize British National Grid projection (EPSG:27700) with proper datum transformation
+        // The +towgs84 parameters provide accurate OSGB36 → WGS84 conversion using Helmert transformation
+        $osgb36Definition = '+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 '
+            . '+ellps=airy +towgs84=446.448,-125.157,542.060,0.1502,0.2470,0.8421,-20.4894 +units=m +no_defs';
+
+        // Add custom definition using the addDef method
+        $this->proj4->addDef('EPSG:27700', $osgb36Definition);
         $this->epsg27700 = new Proj('EPSG:27700', $this->proj4);
 
         // Initialize WGS84 projection (EPSG:4326) - standard lat/lng

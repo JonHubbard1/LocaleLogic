@@ -24,6 +24,10 @@ class PostcodeResource extends JsonResource
             'data' => [
                 'postcode' => $this->resource['postcode'],
                 'coordinates' => $this->resource['coordinates'],
+                'coordinate_offset' => $this->when(
+                    isset($this->resource['coordinate_offset']),
+                    $this->resource['coordinate_offset']
+                ),
                 'geography' => $this->resource['geography'],
                 'property_count' => $this->resource['property_count'],
                 'uprns' => $this->when(

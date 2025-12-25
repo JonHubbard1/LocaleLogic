@@ -7,6 +7,7 @@ use App\Livewire\Admin\ImportManager;
 use App\Livewire\Admin\ImportProgress;
 use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
+use App\Livewire\Tools\CoordinateCalibration;
 use App\Livewire\Tools\PostcodeLookup;
 use App\Livewire\Tools\PostcodeMap;
 use App\Livewire\Tools\PropertyMap;
@@ -45,6 +46,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/lookup', PostcodeLookup::class)->name('lookup');
         Route::get('/map', PropertyMap::class)->name('map');
         Route::get('/postcode-map', PostcodeMap::class)->name('postcode-map');
+        Route::get('/calibrate', CoordinateCalibration::class)->name('calibrate');
         Route::get('/boundaries', BoundaryViewer::class)->name('boundaries');
     });
 });

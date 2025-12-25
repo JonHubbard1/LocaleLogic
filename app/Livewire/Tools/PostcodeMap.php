@@ -18,6 +18,18 @@ class PostcodeMap extends Component
     public $error = null;
     public $mapView = 'markers'; // 'markers' or 'route'
 
+    // User's saved coordinate offset
+    public $offsetLat = 0;
+    public $offsetLng = 0;
+
+    public function mount()
+    {
+        // Load user's saved coordinate offset
+        $user = auth()->user();
+        $this->offsetLat = $user->coordinate_offset_lat ?? 0;
+        $this->offsetLng = $user->coordinate_offset_lng ?? 0;
+    }
+
     public function lookup(PostcodeLookupService $service)
     {
         $this->validate([
@@ -31,11 +43,13 @@ class PostcodeMap extends Component
             // Always include UPRNs for mapping
             $this->result = $service->lookup($this->postcode, true);
 
-            // Dispatch event to JavaScript to update map
+            // Dispatch event to JavaScript to update map with user's offset
             $this->dispatch('updateMap',
                 uprns: $this->result['uprns'],
                 mapView: $this->mapView,
-                postcode: $this->result['postcode']
+                postcode: $this->result['postcode'],
+                offsetLat: $this->offsetLat,
+                offsetLng: $this->offsetLng
             );
         } catch (PostcodeNotFoundException $e) {
             $this->error = "Postcode '{$this->postcode}' not found in database";
@@ -53,7 +67,9 @@ class PostcodeMap extends Component
             $this->dispatch('updateMap',
                 uprns: $this->result['uprns'],
                 mapView: $this->mapView,
-                postcode: $this->result['postcode']
+                postcode: $this->result['postcode'],
+                offsetLat: $this->offsetLat,
+                offsetLng: $this->offsetLng
             );
         }
     }

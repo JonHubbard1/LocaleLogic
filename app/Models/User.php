@@ -15,6 +15,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'coordinate_offset_lat',
+        'coordinate_offset_lng',
     ];
 
     protected $hidden = [
@@ -27,6 +29,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'coordinate_offset_lat' => 'decimal:8',
+            'coordinate_offset_lng' => 'decimal:8',
         ];
     }
 }

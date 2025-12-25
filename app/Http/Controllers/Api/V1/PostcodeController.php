@@ -40,6 +40,12 @@ class PostcodeController extends Controller
             // Perform lookup
             $data = $this->postcodeService->lookup($postcode, $includeUprns);
 
+            // Add user's coordinate offset to response
+            $data['coordinate_offset'] = [
+                'latitude' => (float) $request->user()->coordinate_offset_lat,
+                'longitude' => (float) $request->user()->coordinate_offset_lng,
+            ];
+
             // Return formatted response
             return new PostcodeResource($data);
 
