@@ -40,13 +40,25 @@
                 </flux:card>
             </div>
 
-            <div class="mt-8">
+            <div class="mt-8 grid gap-6 lg:grid-cols-2">
                 <flux:card>
                     <flux:heading>Quick Actions</flux:heading>
                     <div class="mt-4 flex flex-wrap gap-4">
                         <flux:button href="{{ route('admin.import') }}" icon="arrow-up-tray">Import ONSUD Data</flux:button>
                         <flux:button href="{{ route('tools.lookup') }}" icon="magnifying-glass" variant="ghost">Lookup Postcode</flux:button>
                         <flux:button href="{{ route('admin.versions') }}" icon="clock" variant="ghost">View History</flux:button>
+                    </div>
+                </flux:card>
+
+                <flux:card>
+                    <flux:heading>API Access</flux:heading>
+                    <flux:subheading>REST API for external applications</flux:subheading>
+                    <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                        Access LocaleLogic data from your applications using our REST API. View documentation and manage API tokens.
+                    </p>
+                    <div class="mt-4 flex flex-wrap gap-4">
+                        <flux:button href="{{ route('api-docs') }}" icon="book-open" variant="primary" target="_blank">View API Docs</flux:button>
+                        <flux:button href="{{ route('admin.api-tokens') }}" icon="key" variant="ghost">Manage Tokens</flux:button>
                     </div>
                 </flux:card>
             </div>

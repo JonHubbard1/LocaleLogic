@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\CouncilController;
 use App\Http\Controllers\Api\V1\PostcodeController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,4 +19,11 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // Postcode Lookup
     Route::get('postcodes/{postcode}', [PostcodeController::class, 'show']);
+
+    // Council Endpoints
+    Route::get('councils', [CouncilController::class, 'index']);
+    Route::get('councils/{countyCode}/districts', [CouncilController::class, 'districts']);
+    Route::get('councils/{countyCode}/divisions', [CouncilController::class, 'divisions']);
+    Route::get('councils/{councilCode}/wards', [CouncilController::class, 'wards']);
+    Route::get('councils/{councilCode}/parishes', [CouncilController::class, 'parishes']);
 });

@@ -1,10 +1,13 @@
 <?php
 
+use App\Http\Controllers\ApiDocumentationController;
+use App\Livewire\Admin\ApiTokenManager;
 use App\Livewire\Admin\BoundaryImport;
 use App\Livewire\Admin\CleanupManager;
 use App\Livewire\Admin\DataVersionTable;
 use App\Livewire\Admin\ImportManager;
 use App\Livewire\Admin\ImportProgress;
+use App\Livewire\Admin\UserManager;
 use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
 use App\Livewire\Tools\CoordinateCalibration;
@@ -13,6 +16,9 @@ use App\Livewire\Tools\PostcodeMap;
 use App\Livewire\Tools\PropertyMap;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+
+// Public API Documentation
+Route::get('/api-docs', [ApiDocumentationController::class, 'index'])->name('api-docs');
 
 // Login route
 Route::get('/login', Login::class)->name('login');
@@ -39,6 +45,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/boundaries', BoundaryImport::class)->name('boundaries');
         Route::get('/versions', DataVersionTable::class)->name('versions');
         Route::get('/cleanup', CleanupManager::class)->name('cleanup');
+        Route::get('/users', UserManager::class)->name('users');
+        Route::get('/api-tokens', ApiTokenManager::class)->name('api-tokens');
     });
 
     // Tools routes

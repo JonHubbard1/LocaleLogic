@@ -12,14 +12,14 @@ class CreateApiToken extends Command
      *
      * @var string
      */
-    protected $signature = 'api:create-token {email : The email address of the user}';
+    protected $signature = 'api:create-token {email : The email address of the user} {--name= : Name for the token (e.g., CaseMate, LeafletApp)}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Create a new API token for a user';
+    protected $description = 'Create a new API token for a user to access the API from external applications';
 
     /**
      * Execute the console command.
@@ -27,6 +27,7 @@ class CreateApiToken extends Command
     public function handle()
     {
         $email = $this->argument('email');
+        $tokenName = $this->option('name') ?? 'api-token';
 
         // Find user by email
         $user = User::where('email', $email)->first();
@@ -37,14 +38,18 @@ class CreateApiToken extends Command
         }
 
         // Create token
-        $token = $user->createToken('api-token')->plainTextToken;
+        $token = $user->createToken($tokenName)->plainTextToken;
 
         $this->info("API token created successfully for {$user->name} ({$user->email})");
         $this->line('');
+        $this->line("Token Name: {$tokenName}");
         $this->line('Token:');
         $this->line($token);
         $this->line('');
         $this->warn('Store this token securely. It will not be displayed again.');
+        $this->line('');
+        $this->comment('Use this token in the Authorization header:');
+        $this->line('Authorization: Bearer ' . $token);
 
         return 0;
     }
