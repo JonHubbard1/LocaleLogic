@@ -3,6 +3,7 @@
 namespace App\Livewire\Tools;
 
 use App\Exceptions\PostcodeNotFoundException;
+use App\Models\UprnCoordinateOverride;
 use App\Services\PostcodeLookupService;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
@@ -43,13 +44,24 @@ class PostcodeMap extends Component
             // Always include UPRNs for mapping
             $this->result = $service->lookup($this->postcode, true);
 
-            // Dispatch event to JavaScript to update map with user's offset
+            // Load any existing UPRN-specific overrides for this user
+            $overrides = UprnCoordinateOverride::where('user_id', auth()->id())
+                ->whereIn('uprn', collect($this->result['uprns'])->pluck('uprn'))
+                ->get()
+                ->keyBy('uprn');
+
+            // Dispatch event to JavaScript to update map with user's offset and overrides
             $this->dispatch('updateMap',
                 uprns: $this->result['uprns'],
                 mapView: $this->mapView,
                 postcode: $this->result['postcode'],
                 offsetLat: $this->offsetLat,
-                offsetLng: $this->offsetLng
+                offsetLng: $this->offsetLng,
+                overrides: $overrides->map(fn($o) => [
+                    'uprn' => $o->uprn,
+                    'lat' => (float) $o->override_lat,
+                    'lng' => (float) $o->override_lng,
+                ])->values()->toArray()
             );
         } catch (PostcodeNotFoundException $e) {
             $this->error = "Postcode '{$this->postcode}' not found in database";
@@ -64,12 +76,23 @@ class PostcodeMap extends Component
     {
         // When map view changes, update the map if we have results
         if ($this->result) {
+            // Reload overrides
+            $overrides = UprnCoordinateOverride::where('user_id', auth()->id())
+                ->whereIn('uprn', collect($this->result['uprns'])->pluck('uprn'))
+                ->get()
+                ->keyBy('uprn');
+
             $this->dispatch('updateMap',
                 uprns: $this->result['uprns'],
                 mapView: $this->mapView,
                 postcode: $this->result['postcode'],
                 offsetLat: $this->offsetLat,
-                offsetLng: $this->offsetLng
+                offsetLng: $this->offsetLng,
+                overrides: $overrides->map(fn($o) => [
+                    'uprn' => $o->uprn,
+                    'lat' => (float) $o->override_lat,
+                    'lng' => (float) $o->override_lng,
+                ])->values()->toArray()
             );
         }
     }

@@ -149,11 +149,28 @@
                 <div wire:ignore id="map" class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800" style="height: 600px;" tabindex="0"></div>
 
                 @if($result)
-                    <div class="mt-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
-                        <div class="flex items-start gap-3">
-                            <flux:icon.information-circle class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                            <div class="text-sm text-blue-800 dark:text-blue-200">
-                                <strong>How to calibrate:</strong> Find a property you recognize on the map. Use the arrow controls to shift all pins until they align with the actual building outlines. Once satisfied, click "Save Offset" to apply this adjustment to all future maps.
+                    <div class="mt-4 space-y-3">
+                        <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+                            <div class="flex items-start gap-3">
+                                <flux:icon.information-circle class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                                <div class="text-sm text-blue-800 dark:text-blue-200">
+                                    <strong>How to calibrate:</strong> The purple dashed line connects all properties in sequence - outliers will be visually obvious. Use arrow controls to shift ALL pins, or drag individual pins to correct positions. Blue pins use global offset, green pins have individual overrides.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
+                            <div class="flex items-start gap-3">
+                                <flux:icon.check-circle class="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                                <div class="text-sm text-green-800 dark:text-green-200">
+                                    <strong>Individual Overrides:</strong>
+                                    @php
+                                        $overrideCount = \App\Models\UprnCoordinateOverride::where('user_id', auth()->id())
+                                            ->whereIn('uprn', collect($result['uprns'])->pluck('uprn'))
+                                            ->count();
+                                    @endphp
+                                    {{ $overrideCount }} pin{{ $overrideCount === 1 ? '' : 's' }} {{ $overrideCount === 1 ? 'has' : 'have' }} custom position{{ $overrideCount === 1 ? '' : 's' }} in this postcode.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -179,6 +196,7 @@
 <script>
     let map = null;
     let markersLayer = null;
+    let routeLayer = null;
 
     document.addEventListener('livewire:initialized', () => {
         console.log('Livewire initialized, setting up calibration map...');
@@ -193,8 +211,9 @@
                 maxZoom: 19
             }).addTo(map);
 
-            // Create layer group for markers
+            // Create layer groups for markers and route
             markersLayer = L.layerGroup().addTo(map);
+            routeLayer = L.layerGroup().addTo(map);
 
             console.log('Calibration map setup complete');
 
@@ -211,8 +230,8 @@
 
         // Listen for map update events from Livewire
         Livewire.on('updateMap', (event) => {
-            const { uprns, offsetLat, offsetLng, postcode } = event;
-            updateMap(uprns, offsetLat, offsetLng, postcode);
+            const { uprns, offsetLat, offsetLng, postcode, overrides } = event;
+            updateMap(uprns, offsetLat, offsetLng, postcode, overrides || []);
         });
 
         // Listen for clear map event
@@ -226,30 +245,89 @@
         });
     });
 
-    function updateMap(uprns, offsetLat, offsetLng, postcode) {
-        // Clear existing markers
+    function updateMap(uprns, offsetLat, offsetLng, postcode, overrides = []) {
+        // Clear existing layers
         markersLayer.clearLayers();
+        routeLayer.clearLayers();
 
         if (!uprns || uprns.length === 0) {
             return;
         }
 
-        // Plot all properties with the current offset applied
-        uprns.forEach(property => {
-            const adjustedLat = property.latitude + parseFloat(offsetLat);
-            const adjustedLng = property.longitude + parseFloat(offsetLng);
-
-            L.marker([adjustedLat, adjustedLng])
-                .bindPopup(`<strong>UPRN:</strong> ${property.uprn}<br><strong>Postcode:</strong> ${postcode}`)
-                .addTo(markersLayer);
+        // Create a map of UPRN overrides for quick lookup
+        const overrideMap = {};
+        overrides.forEach(override => {
+            overrideMap[override.uprn] = { lat: override.lat, lng: override.lng };
         });
 
+        // Plot all properties with the current offset applied (or individual override)
+        uprns.forEach(property => {
+            let finalLat, finalLng;
+            let hasOverride = false;
+
+            // Check if this UPRN has an individual override
+            if (overrideMap[property.uprn]) {
+                // Use the override position directly (no global offset applied)
+                finalLat = overrideMap[property.uprn].lat;
+                finalLng = overrideMap[property.uprn].lng;
+                hasOverride = true;
+            } else {
+                // Apply global offset
+                finalLat = property.latitude + parseFloat(offsetLat);
+                finalLng = property.longitude + parseFloat(offsetLng);
+            }
+
+            // Create draggable marker with different color for overrides
+            const marker = L.marker([finalLat, finalLng], {
+                draggable: true,
+                icon: hasOverride ? createCustomIcon('green') : createCustomIcon('blue')
+            });
+
+            // Add popup with UPRN and instructions
+            let popupContent = `<strong>UPRN:</strong> ${property.uprn}<br><strong>Postcode:</strong> ${postcode}<br>`;
+            if (hasOverride) {
+                popupContent += `<span style="color: green; font-weight: bold;">✓ Individual Override Active</span><br>`;
+                popupContent += `<button onclick="deleteOverride('${property.uprn}')" style="margin-top: 5px; padding: 2px 8px; background: #ef4444; color: white; border: none; border-radius: 3px; cursor: pointer;">Reset to Default</button>`;
+            } else {
+                popupContent += `<em>Drag to set individual position</em>`;
+            }
+            marker.bindPopup(popupContent);
+
+            // Handle drag end - save new position
+            marker.on('dragend', function(e) {
+                const newPos = e.target.getLatLng();
+                @this.call('saveUprnOverride', property.uprn, newPos.lat, newPos.lng);
+            });
+
+            marker.addTo(markersLayer);
+        });
+
+        // Draw polyline connecting all properties to make outliers obvious
+        const allCoordinates = uprns.map(property => {
+            let finalLat, finalLng;
+
+            // Check if this UPRN has an individual override
+            if (overrideMap[property.uprn]) {
+                finalLat = overrideMap[property.uprn].lat;
+                finalLng = overrideMap[property.uprn].lng;
+            } else {
+                finalLat = property.latitude + parseFloat(offsetLat);
+                finalLng = property.longitude + parseFloat(offsetLng);
+            }
+
+            return [finalLat, finalLng];
+        });
+
+        // Draw the polyline route
+        L.polyline(allCoordinates, {
+            color: '#9333ea',  // Purple color
+            weight: 2,
+            opacity: 0.6,
+            dashArray: '5, 5'  // Dashed line to make it less intrusive
+        }).addTo(routeLayer);
+
         // Fit map bounds to show all markers (using adjusted coordinates)
-        const bounds = uprns.map(p => [
-            p.latitude + parseFloat(offsetLat),
-            p.longitude + parseFloat(offsetLng)
-        ]);
-        map.fitBounds(bounds, { padding: [50, 50] });
+        map.fitBounds(allCoordinates, { padding: [50, 50] });
 
         // Focus the map so keyboard controls work
         document.getElementById('map').focus();
@@ -257,7 +335,38 @@
 
     function clearMap() {
         if (markersLayer) markersLayer.clearLayers();
+        if (routeLayer) routeLayer.clearLayers();
         if (map) map.setView([54.5, -3.5], 6);
+    }
+
+    // Helper function to create custom colored icons
+    function createCustomIcon(color) {
+        const iconUrls = {
+            'blue': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            'green': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png'
+        };
+
+        return L.icon({
+            iconUrl: iconUrls[color],
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+    }
+
+    // Global function to delete UPRN override (called from popup button)
+    function deleteOverride(uprn) {
+        if (confirm(`Reset UPRN ${uprn} to default position?`)) {
+            @this.call('deleteUprnOverride', uprn);
+            // Reload the map to show updated positions
+            setTimeout(() => {
+                if (@this.result) {
+                    @this.call('lookup');
+                }
+            }, 100);
+        }
     }
 </script>
 @endpush

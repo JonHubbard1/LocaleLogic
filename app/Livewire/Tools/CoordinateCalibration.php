@@ -3,6 +3,7 @@
 namespace App\Livewire\Tools;
 
 use App\Exceptions\PostcodeNotFoundException;
+use App\Models\UprnCoordinateOverride;
 use App\Services\PostcodeLookupService;
 use InvalidArgumentException;
 use Livewire\Attributes\Layout;
@@ -45,12 +46,23 @@ class CoordinateCalibration extends Component
             // Always include UPRNs for mapping
             $this->result = $service->lookup($this->postcode, true);
 
-            // Dispatch event to JavaScript to update map with current offset
+            // Load any existing UPRN-specific overrides for this user
+            $overrides = UprnCoordinateOverride::where('user_id', auth()->id())
+                ->whereIn('uprn', collect($this->result['uprns'])->pluck('uprn'))
+                ->get()
+                ->keyBy('uprn');
+
+            // Dispatch event to JavaScript to update map with current offset and overrides
             $this->dispatch('updateMap',
                 uprns: $this->result['uprns'],
                 offsetLat: $this->offsetLat,
                 offsetLng: $this->offsetLng,
-                postcode: $this->result['postcode']
+                postcode: $this->result['postcode'],
+                overrides: $overrides->map(fn($o) => [
+                    'uprn' => $o->uprn,
+                    'lat' => (float) $o->override_lat,
+                    'lng' => (float) $o->override_lng,
+                ])->values()->toArray()
             );
         } catch (PostcodeNotFoundException $e) {
             $this->error = "Postcode '{$this->postcode}' not found in database";
@@ -125,6 +137,31 @@ class CoordinateCalibration extends Component
         $user->save();
 
         $this->dispatch('offsetSaved');
+    }
+
+    public function saveUprnOverride($uprn, $lat, $lng)
+    {
+        UprnCoordinateOverride::updateOrCreate(
+            [
+                'user_id' => auth()->id(),
+                'uprn' => $uprn,
+            ],
+            [
+                'override_lat' => $lat,
+                'override_lng' => $lng,
+            ]
+        );
+
+        $this->dispatch('uprnOverrideSaved', uprn: $uprn);
+    }
+
+    public function deleteUprnOverride($uprn)
+    {
+        UprnCoordinateOverride::where('user_id', auth()->id())
+            ->where('uprn', $uprn)
+            ->delete();
+
+        $this->dispatch('uprnOverrideDeleted', uprn: $uprn);
     }
 
     public function clear()

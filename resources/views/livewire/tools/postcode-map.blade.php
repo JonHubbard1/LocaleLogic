@@ -234,8 +234,8 @@ if (coordinates.length > 0) {
 
         // Listen for map update events from Livewire
         Livewire.on('updateMap', (event) => {
-            const { uprns, mapView, postcode, offsetLat, offsetLng } = event;
-            updateMap(uprns, mapView, postcode, offsetLat, offsetLng);
+            const { uprns, mapView, postcode, offsetLat, offsetLng, overrides } = event;
+            updateMap(uprns, mapView, postcode, offsetLat, offsetLng, overrides || []);
         });
 
         // Listen for clear map event
@@ -244,7 +244,7 @@ if (coordinates.length > 0) {
         });
     });
 
-    function updateMap(uprns, mapView, postcode, offsetLat = 0, offsetLng = 0) {
+    function updateMap(uprns, mapView, postcode, offsetLat = 0, offsetLng = 0, overrides = []) {
         // Clear existing layers
         markersLayer.clearLayers();
         routeLayer.clearLayers();
@@ -253,25 +253,43 @@ if (coordinates.length > 0) {
             return;
         }
 
-        // Apply user's saved coordinate offset
-        const applyOffset = (lat, lng) => ({
-            lat: lat + parseFloat(offsetLat),
-            lng: lng + parseFloat(offsetLng)
+        // Create a map of UPRN overrides for quick lookup
+        const overrideMap = {};
+        overrides.forEach(override => {
+            overrideMap[override.uprn] = { lat: override.lat, lng: override.lng };
         });
+
+        // Apply coordinate offset or individual override
+        const getCoordinates = (property) => {
+            // Check if this UPRN has an individual override
+            if (overrideMap[property.uprn]) {
+                // Use the override position directly (no global offset applied)
+                return {
+                    lat: overrideMap[property.uprn].lat,
+                    lng: overrideMap[property.uprn].lng
+                };
+            } else {
+                // Apply global offset
+                return {
+                    lat: property.latitude + parseFloat(offsetLat),
+                    lng: property.longitude + parseFloat(offsetLng)
+                };
+            }
+        };
 
         if (mapView === 'markers') {
             // Example 1: Plot all properties as individual markers
             uprns.forEach(property => {
-                const adjusted = applyOffset(property.latitude, property.longitude);
-                L.marker([adjusted.lat, adjusted.lng])
+                const coords = getCoordinates(property);
+                L.marker([coords.lat, coords.lng])
                     .bindPopup(`<strong>UPRN:</strong> ${property.uprn}<br><strong>Postcode:</strong> ${postcode}`)
                     .addTo(markersLayer);
             });
         } else {
             // Example 2: Create a walking route connecting all properties
             const coordinates = uprns.map(p => {
-                const adjusted = applyOffset(p.latitude, p.longitude);
-                return [adjusted.lat, adjusted.lng];
+                const coords = getCoordinates(p);
+                return [coords.lat, coords.lng];
             });
 
             // Draw the polyline route
@@ -323,10 +341,10 @@ if (coordinates.length > 0) {
             });
         }
 
-        // Fit map bounds to show all markers (with offset applied)
+        // Fit map bounds to show all markers (with offset/overrides applied)
         const bounds = uprns.map(p => {
-            const adjusted = applyOffset(p.latitude, p.longitude);
-            return [adjusted.lat, adjusted.lng];
+            const coords = getCoordinates(p);
+            return [coords.lat, coords.lng];
         });
         map.fitBounds(bounds, { padding: [50, 50] });
     }
