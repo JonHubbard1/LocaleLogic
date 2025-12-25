@@ -88,7 +88,7 @@
                 </div>
 
                 {{-- Leaflet Map Container --}}
-                <div id="map" class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800" style="height: 600px;"></div>
+                <div wire:ignore id="map" class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800" style="height: 600px;"></div>
 
                 {{-- Map Legend/Help --}}
                 <div class="mt-4 grid gap-4 md:grid-cols-2">
