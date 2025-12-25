@@ -84,8 +84,9 @@ mkdir -p bootstrap/cache
 # 7. PERMISSIONS
 ##############################################################################
 echo "🔐 Setting correct permissions..."
-chown -R ploi:ploi storage bootstrap/cache
-chmod -R 775 storage bootstrap/cache
+# Note: Ploi manages ownership automatically, we only set permissions
+chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+# If specific files need ownership changes, Ploi will handle it via its own processes
 
 ##############################################################################
 # 8. ENVIRONMENT & CACHE
