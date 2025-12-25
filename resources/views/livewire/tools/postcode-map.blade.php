@@ -88,7 +88,7 @@
                 </div>
 
                 {{-- Leaflet Map Container --}}
-                <div id="map" class="w-full h-[600px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800"></div>
+                <div id="map" class="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800" style="height: 600px;"></div>
 
                 {{-- Map Legend/Help --}}
                 <div class="mt-4 grid gap-4 md:grid-cols-2">
@@ -197,18 +197,31 @@ if (coordinates.length > 0) {
     let routeLayer = null;
 
     document.addEventListener('livewire:initialized', () => {
-        // Initialize the map centered on UK
-        map = L.map('map').setView([54.5, -3.5], 6);
+        console.log('Livewire initialized, setting up map...');
 
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19
-        }).addTo(map);
+        // Wait a moment for DOM to be fully ready
+        setTimeout(() => {
+            console.log('Initializing Leaflet map...');
 
-        // Create layer groups for markers and routes
-        markersLayer = L.layerGroup().addTo(map);
-        routeLayer = L.layerGroup().addTo(map);
+            // Initialize the map centered on UK
+            map = L.map('map').setView([54.5, -3.5], 6);
+
+            console.log('Map initialized:', map);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            console.log('Tiles added to map');
+
+            // Create layer groups for markers and routes
+            markersLayer = L.layerGroup().addTo(map);
+            routeLayer = L.layerGroup().addTo(map);
+
+            console.log('Map setup complete');
+        }, 100);
 
         // Listen for map update events from Livewire
         Livewire.on('updateMap', (event) => {
