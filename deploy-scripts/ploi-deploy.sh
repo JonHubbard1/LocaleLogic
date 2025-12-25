@@ -95,7 +95,9 @@ echo "🔧 Clearing caches..."
 php artisan config:clear
 php artisan route:clear
 php artisan view:clear
-php artisan cache:clear
+
+# Application cache may fail due to permissions, don't stop deployment
+php artisan cache:clear 2>/dev/null || echo "⚠️  Application cache clear skipped (permission denied)"
 
 ##############################################################################
 # 9. MIGRATIONS
