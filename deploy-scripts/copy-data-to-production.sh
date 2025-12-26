@@ -64,9 +64,9 @@ echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}Step 1: Dumping database from development${NC}"
 echo -e "${GREEN}============================================${NC}"
 
-ssh -p $DEV_SSH_PORT $DEV_SERVER << 'ENDSSH'
+ssh -p $DEV_SSH_PORT $DEV_SERVER << ENDSSH
 echo "Dumping PostgreSQL database..."
-pg_dump -h localhost -U ploi -d ploi_localelogic \
+pg_dump -h localhost -U $DEV_DB_USER -d $DEV_DB_NAME \
     --format=custom \
     --compress=9 \
     --file=/tmp/localelogic_db.dump
