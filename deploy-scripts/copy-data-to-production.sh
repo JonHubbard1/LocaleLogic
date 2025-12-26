@@ -24,6 +24,7 @@ echo ""
 
 # Configuration - EDIT THESE VALUES
 DEV_SERVER="ploi@dev.localelogic.uk"
+DEV_SSH_PORT="2271"  # SSH port for development server (default 22, adjust if needed)
 DEV_DB_HOST="localhost"
 DEV_DB_NAME="ploi_localelogic"
 DEV_DB_USER="ploi"
@@ -38,7 +39,7 @@ PROD_PATH="/home/ploi/localelogic.uk"  # Adjust this to your production path
 TEMP_DIR="/tmp/localelogic-migration"
 
 echo -e "${YELLOW}Configuration:${NC}"
-echo "  Development Server: $DEV_SERVER"
+echo "  Development Server: $DEV_SERVER (port $DEV_SSH_PORT)"
 echo "  Development Path: $DEV_PATH"
 echo "  Production Path: $PROD_PATH"
 echo ""
@@ -63,7 +64,7 @@ echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}Step 1: Dumping database from development${NC}"
 echo -e "${GREEN}============================================${NC}"
 
-ssh $DEV_SERVER << 'ENDSSH'
+ssh -p $DEV_SSH_PORT $DEV_SERVER << 'ENDSSH'
 echo "Dumping PostgreSQL database..."
 pg_dump -h localhost -U ploi -d ploi_localelogic \
     --format=custom \
@@ -83,7 +84,7 @@ echo -e "${GREEN}Step 2: Copying database dump to production${NC}"
 echo -e "${GREEN}============================================${NC}"
 
 echo "Downloading database dump..."
-rsync -avz --progress $DEV_SERVER:/tmp/localelogic_db.dump $TEMP_DIR/
+rsync -avz --progress -e "ssh -p $DEV_SSH_PORT" $DEV_SERVER:/tmp/localelogic_db.dump $TEMP_DIR/
 
 #############################################################################
 # 3. RESTORE DATABASE ON PRODUCTION
@@ -123,6 +124,7 @@ mkdir -p $PROD_PATH/storage/logs
 
 echo "Copying ONSUD data files..."
 rsync -avz --progress \
+    -e "ssh -p $DEV_SSH_PORT" \
     --exclude="livewire-tmp" \
     --exclude="*.log" \
     $DEV_SERVER:$DEV_PATH/storage/app/onsud/ \
@@ -130,6 +132,7 @@ rsync -avz --progress \
 
 echo "Copying public storage files..."
 rsync -avz --progress \
+    -e "ssh -p $DEV_SSH_PORT" \
     $DEV_SERVER:$DEV_PATH/storage/app/public/ \
     $PROD_PATH/storage/app/public/
 
@@ -142,7 +145,7 @@ echo -e "${GREEN}Step 5: Cleanup${NC}"
 echo -e "${GREEN}============================================${NC}"
 
 echo "Cleaning up temporary files on development server..."
-ssh $DEV_SERVER "rm -f /tmp/localelogic_db.dump"
+ssh -p $DEV_SSH_PORT $DEV_SERVER "rm -f /tmp/localelogic_db.dump"
 
 echo "Cleaning up temporary files on production server..."
 rm -rf $TEMP_DIR
