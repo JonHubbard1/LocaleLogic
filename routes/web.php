@@ -7,6 +7,7 @@ use App\Livewire\Admin\CleanupManager;
 use App\Livewire\Admin\DataVersionTable;
 use App\Livewire\Admin\ImportManager;
 use App\Livewire\Admin\ImportProgress;
+use App\Livewire\Admin\TableViewer;
 use App\Livewire\Admin\UserManager;
 use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
@@ -47,6 +48,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/cleanup', CleanupManager::class)->name('cleanup');
         Route::get('/users', UserManager::class)->name('users');
         Route::get('/api-tokens', ApiTokenManager::class)->name('api-tokens');
+        Route::get('/tables', TableViewer::class)->name('tables');
     });
 
     // Tools routes

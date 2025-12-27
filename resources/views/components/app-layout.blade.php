@@ -6,10 +6,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'LocaleLogic' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @fluxAppearance
+    @stack('styles')
 </head>
 <body class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <flux:sidebar sticky class="bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700">
+    <flux:sidebar sticky stashable class="bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700">
         <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
 
         <flux:brand href="/" class="px-2 dark:hidden">
@@ -31,13 +31,19 @@
 
             <flux:navlist.group expandable heading="Admin" icon="cog-6-tooth">
                 <flux:navlist.item href="{{ route('admin.import') }}">ONSUD Imports</flux:navlist.item>
+                <flux:navlist.item href="{{ route('admin.boundaries') }}">Boundary Import</flux:navlist.item>
                 <flux:navlist.item href="{{ route('admin.versions') }}">Data Versions</flux:navlist.item>
+                <flux:navlist.item href="{{ route('admin.tables') }}">Table Viewer</flux:navlist.item>
                 <flux:navlist.item href="{{ route('admin.cleanup') }}">System Cleanup</flux:navlist.item>
+                <flux:navlist.item href="{{ route('admin.users') }}">Users</flux:navlist.item>
+                <flux:navlist.item href="{{ route('admin.api-tokens') }}">API Tokens</flux:navlist.item>
             </flux:navlist.group>
 
             <flux:navlist.group expandable heading="Tools" icon="wrench-screwdriver">
                 <flux:navlist.item href="{{ route('tools.lookup') }}">Postcode Lookup</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.map') }}">Property Map</flux:navlist.item>
+                <flux:navlist.item href="{{ route('tools.postcode-map') }}">Postcode Map Demo</flux:navlist.item>
+                <flux:navlist.item href="{{ route('tools.calibrate') }}">Coordinate Calibration</flux:navlist.item>
                 <flux:navlist.item href="{{ route('tools.boundaries') }}">Boundary Viewer</flux:navlist.item>
             </flux:navlist.group>
         </flux:navlist>
@@ -45,7 +51,7 @@
         <flux:spacer />
 
         <flux:navlist variant="outline">
-            <flux:navlist.item icon="arrow-right-start-on-rectangle" onclick="handleLogout()">Logout</flux:navlist.item>
+            <flux:navlist.item icon="arrow-right-start-on-rectangle" wire:click="logout">Logout</flux:navlist.item>
         </flux:navlist>
     </flux:sidebar>
 
@@ -61,17 +67,20 @@
 
     @fluxScripts
     <script>
-        function handleLogout() {
-            fetch('{{ route("logout") }}', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json',
-                },
-            }).then(() => {
-                window.location.href = '{{ route("login") }}';
+        document.addEventListener('livewire:initialized', () => {
+            Livewire.on('logout', () => {
+                fetch('{{ route("logout") }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                }).then(() => {
+                    window.location.href = '{{ route("login") }}';
+                });
             });
-        }
+        });
     </script>
+    @stack('scripts')
 </body>
 </html>
