@@ -39,67 +39,75 @@ return new class extends Migration
         // Step 2: Add gss_code and year_code columns, populate them, change primary keys
 
         // 1. regions
-        DB::statement('ALTER TABLE regions ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE regions ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE regions SET gss_code = rgn25cd, year_code = '25'");
-        DB::statement('ALTER TABLE regions DROP CONSTRAINT regions_pkey');
+        DB::statement('ALTER TABLE regions ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE regions ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE regions SET gss_code = rgn25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE regions DROP CONSTRAINT IF EXISTS regions_pkey');
         DB::statement('ALTER TABLE regions ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_rgn25cd');
         DB::statement('CREATE UNIQUE INDEX idx_rgn25cd ON regions (rgn25cd)');
 
         // 2. counties
-        DB::statement('ALTER TABLE counties ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE counties ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE counties SET gss_code = cty25cd, year_code = '25'");
-        DB::statement('ALTER TABLE counties DROP CONSTRAINT counties_pkey');
+        DB::statement('ALTER TABLE counties ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE counties ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE counties SET gss_code = cty25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE counties DROP CONSTRAINT IF EXISTS counties_pkey');
         DB::statement('ALTER TABLE counties ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_cty25cd');
         DB::statement('CREATE UNIQUE INDEX idx_cty25cd ON counties (cty25cd)');
 
         // 3. constituencies
-        DB::statement('ALTER TABLE constituencies ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE constituencies ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE constituencies SET gss_code = pcon24cd, year_code = '24'");
-        DB::statement('ALTER TABLE constituencies DROP CONSTRAINT constituencies_pkey');
+        DB::statement('ALTER TABLE constituencies ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE constituencies ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE constituencies SET gss_code = pcon24cd, year_code = '24' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE constituencies DROP CONSTRAINT IF EXISTS constituencies_pkey');
         DB::statement('ALTER TABLE constituencies ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_pcon24cd');
         DB::statement('CREATE UNIQUE INDEX idx_pcon24cd ON constituencies (pcon24cd)');
 
         // 4. police_force_areas
-        DB::statement('ALTER TABLE police_force_areas ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE police_force_areas ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE police_force_areas SET gss_code = pfa23cd, year_code = '23'");
-        DB::statement('ALTER TABLE police_force_areas DROP CONSTRAINT police_force_areas_pkey');
+        DB::statement('ALTER TABLE police_force_areas ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE police_force_areas ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE police_force_areas SET gss_code = pfa23cd, year_code = '23' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE police_force_areas DROP CONSTRAINT IF EXISTS police_force_areas_pkey');
         DB::statement('ALTER TABLE police_force_areas ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_pfa23cd');
         DB::statement('CREATE UNIQUE INDEX idx_pfa23cd ON police_force_areas (pfa23cd)');
 
         // 5. local_authority_districts
-        DB::statement('ALTER TABLE local_authority_districts ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE local_authority_districts ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE local_authority_districts SET gss_code = lad25cd, year_code = '25'");
-        DB::statement('ALTER TABLE local_authority_districts DROP CONSTRAINT local_authority_districts_pkey');
+        DB::statement('ALTER TABLE local_authority_districts ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE local_authority_districts ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE local_authority_districts SET gss_code = lad25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE local_authority_districts DROP CONSTRAINT IF EXISTS local_authority_districts_pkey');
         DB::statement('ALTER TABLE local_authority_districts ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_lad25cd');
         DB::statement('CREATE UNIQUE INDEX idx_lad25cd ON local_authority_districts (lad25cd)');
 
         // 6. wards
-        DB::statement('ALTER TABLE wards ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE wards ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE wards SET gss_code = wd25cd, year_code = '25'");
-        DB::statement('ALTER TABLE wards DROP CONSTRAINT wards_pkey');
+        DB::statement('ALTER TABLE wards ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE wards ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE wards SET gss_code = wd25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE wards DROP CONSTRAINT IF EXISTS wards_pkey');
         DB::statement('ALTER TABLE wards ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_wd25cd');
         DB::statement('CREATE UNIQUE INDEX idx_wd25cd ON wards (wd25cd)');
 
         // 7. parishes
-        DB::statement('ALTER TABLE parishes ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE parishes ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE parishes SET gss_code = parncp25cd, year_code = '25'");
-        DB::statement('ALTER TABLE parishes DROP CONSTRAINT parishes_pkey');
+        DB::statement('ALTER TABLE parishes ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE parishes ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE parishes SET gss_code = parncp25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE parishes DROP CONSTRAINT IF EXISTS parishes_pkey');
         DB::statement('ALTER TABLE parishes ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_parncp25cd');
         DB::statement('CREATE UNIQUE INDEX idx_parncp25cd ON parishes (parncp25cd)');
 
         // 8. county_electoral_divisions
-        DB::statement('ALTER TABLE county_electoral_divisions ADD COLUMN gss_code CHAR(9)');
-        DB::statement('ALTER TABLE county_electoral_divisions ADD COLUMN year_code CHAR(2)');
-        DB::statement("UPDATE county_electoral_divisions SET gss_code = ced25cd, year_code = '25'");
-        DB::statement('ALTER TABLE county_electoral_divisions DROP CONSTRAINT county_electoral_divisions_pkey');
+        DB::statement('ALTER TABLE county_electoral_divisions ADD COLUMN IF NOT EXISTS gss_code CHAR(9)');
+        DB::statement('ALTER TABLE county_electoral_divisions ADD COLUMN IF NOT EXISTS year_code CHAR(2)');
+        DB::statement("UPDATE county_electoral_divisions SET gss_code = ced25cd, year_code = '25' WHERE gss_code IS NULL");
+        DB::statement('ALTER TABLE county_electoral_divisions DROP CONSTRAINT IF EXISTS county_electoral_divisions_pkey');
         DB::statement('ALTER TABLE county_electoral_divisions ADD PRIMARY KEY (gss_code)');
+        DB::statement('DROP INDEX IF EXISTS idx_ced25cd');
         DB::statement('CREATE UNIQUE INDEX idx_ced25cd ON county_electoral_divisions (ced25cd)');
 
         // Step 3: Recreate foreign key constraints (still referencing year-specific columns for property joins)
