@@ -57,3 +57,8 @@ retry-*.php
 *.jpg
 *.jpeg
 *.gif
+
+# Custom Development Files
+AGENTS.md
+OllamaClaude/
+opencode.json
