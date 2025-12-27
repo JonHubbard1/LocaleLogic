@@ -43,7 +43,15 @@ class CouncilController extends Controller
 
         // Filter by council type if specified
         if ($type) {
-            $query->where('gss_code', 'like', $this->getGssCodePattern($type));
+            if ($type === 'unitary') {
+                // Unitary authorities are E06% (unitary) and E09% (London boroughs)
+                $query->where(function($q) {
+                    $q->where('gss_code', 'like', 'E06%')
+                      ->orWhere('gss_code', 'like', 'E09%');
+                });
+            } else {
+                $query->where('gss_code', 'like', $this->getGssCodePattern($type));
+            }
         }
 
         $councils = $query->get()->map(function ($council) {
