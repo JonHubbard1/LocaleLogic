@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Represents UK parishes with optional Welsh language names.
  * Stores approximately 11,000 parish records from ONS lookup data.
+ *
+ * Primary key is now 'gss_code' (year-agnostic) for consistent identification.
+ * 'parncp25cd' is retained for backward compatibility and property joins.
  */
 class Parish extends Model
 {
@@ -24,7 +27,7 @@ class Parish extends Model
      *
      * @var string
      */
-    protected $primaryKey = 'parncp25cd';
+    protected $primaryKey = 'gss_code';
 
     /**
      * The "type" of the auto-incrementing ID.
@@ -46,11 +49,24 @@ class Parish extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'gss_code',
+        'year_code',
         'parncp25cd',
         'parncp25nm',
         'parncp25nmw',
         'lad25cd',
     ];
+
+    /**
+     * Find a parish by GSS code.
+     *
+     * @param string $code GSS code to search for
+     * @return static|null
+     */
+    public static function findByGssCode(string $code): ?static
+    {
+        return static::where('gss_code', $code)->first();
+    }
 
     /**
      * Get the local authority district that owns the parish.

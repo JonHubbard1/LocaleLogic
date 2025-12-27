@@ -24,11 +24,12 @@
                                 @php
                                     $nameImport = $this->getNameImportStatus($key);
                                     $polygonImport = $this->getImportStatus($key, 'polygons');
+                                    $isOutdated = $this->isOutdated($key);
                                 @endphp
 
                                 {{-- Main Compact Row --}}
                                 <tr
-                                    class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors {{ $boundaryType === $key ? 'bg-blue-50 dark:bg-blue-900/20' : '' }}"
+                                    class="cursor-pointer transition-colors {{ $isOutdated ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800' }} {{ $boundaryType === $key ? 'bg-blue-50 dark:bg-blue-900/20' : '' }}"
                                     @click="expanded['{{ $key }}'] = !expanded['{{ $key }}']"
                                 >
                                     <td class="px-2 py-3" @click.stop>
@@ -211,6 +212,110 @@
                                                 <div class="font-semibold text-sm text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
                                                     Boundary Polygons
                                                 </div>
+
+@if($isOutdated)
+                                                    @php
+                                                        // Calculate expected version for display
+                                                        $updateSchedule = [
+                                                            'wards' => ['month' => 'December'],
+                                                            'parishes' => ['month' => 'April'],
+                                                            'lad' => ['month' => 'April'],
+                                                            'ced' => ['month' => 'May'],
+                                                            'constituencies' => ['month' => 'July'],
+                                                            'police_force_areas' => ['month' => 'December'],
+                                                            'region' => ['month' => 'May'],
+                                                            'counties' => ['month' => 'December'],
+                                                        ];
+
+                                                        $schedule = $updateSchedule[$key] ?? null;
+                                                        $expectedVersionDisplay = null;
+
+                                                        if ($schedule) {
+                                                            $monthMap = ['January' => 1, 'February' => 2, 'March' => 3, 'April' => 4, 'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8, 'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12];
+                                                            $expectedMonthNum = $monthMap[$schedule['month']] ?? null;
+
+                                                            if ($expectedMonthNum) {
+                                                                $currentYear = now()->year;
+                                                                $currentMonth = now()->month;
+                                                                $expectedYear = ($currentMonth >= $expectedMonthNum) ? $currentYear : $currentYear - 1;
+                                                                $expectedVersionDisplay = \Carbon\Carbon::parse(sprintf('%d-%02d-01', $expectedYear, $expectedMonthNum))->format('F Y');
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    <div class="rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-900/30">
+                                                        <div class="flex items-start gap-2">
+                                                            <flux:icon.exclamation-triangle class="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                                                            <div class="flex-1">
+                                                                <p class="text-sm font-medium text-red-900 dark:text-red-100">Update Available</p>
+                                                                <p class="text-xs text-red-700 dark:text-red-300 mt-1">
+                                                                    Expected version: <span class="font-semibold">{{ $expectedVersionDisplay }}</span>
+                                                                    @if($this->getOnsVersionDate($key))
+                                                                        <br>Current version: <span class="font-semibold">{{ \Carbon\Carbon::parse($this->getOnsVersionDate($key))->format('F Y') }}</span>
+                                                                    @endif
+                                                                </p>
+                                                                <p class="text-xs text-red-600 dark:text-red-400 mt-2">
+                                                                    A newer version should be available on the ONS portal.
+                                                                </p>
+                                                                <div class="mt-3 flex items-center gap-2">
+                                                                    <flux:button
+                                                                        wire:click.stop="markAsChecked('{{ $key }}')"
+                                                                        size="xs"
+                                                                        variant="ghost"
+                                                                        icon="check-circle"
+                                                                    >
+                                                                        I checked, no update available
+                                                                    </flux:button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @else
+                                                    @php
+                                                        // Check if there's a manual check record
+                                                        $updateSchedule = [
+                                                            'wards' => ['month' => 'December'],
+                                                            'parishes' => ['month' => 'April'],
+                                                            'lad' => ['month' => 'April'],
+                                                            'ced' => ['month' => 'May'],
+                                                            'constituencies' => ['month' => 'July'],
+                                                            'police_force_areas' => ['month' => 'December'],
+                                                            'region' => ['month' => 'May'],
+                                                            'counties' => ['month' => 'December'],
+                                                        ];
+
+                                                        $schedule = $updateSchedule[$key] ?? null;
+                                                        $manualCheck = null;
+
+                                                        if ($schedule) {
+                                                            $monthMap = ['January' => 1, 'February' => 2, 'March' => 3, 'April' => 4, 'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8, 'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12];
+                                                            $expectedMonthNum = $monthMap[$schedule['month']] ?? null;
+
+                                                            if ($expectedMonthNum) {
+                                                                $currentYear = now()->year;
+                                                                $currentMonth = now()->month;
+                                                                $expectedYear = ($currentMonth >= $expectedMonthNum) ? $currentYear : $currentYear - 1;
+                                                                $expectedVersion = sprintf('%d-%02d-01', $expectedYear, $expectedMonthNum);
+
+                                                                $manualCheck = \Illuminate\Support\Facades\DB::table('boundary_update_checks')
+                                                                    ->where('boundary_type', $key)
+                                                                    ->where('expected_version', $expectedVersion)
+                                                                    ->first();
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    @if($manualCheck)
+                                                        <div class="rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-700 dark:bg-blue-900/20">
+                                                            <p class="text-xs text-blue-700 dark:text-blue-300">
+                                                                <flux:icon.check-circle class="inline h-3 w-3" />
+                                                                Checked for updates on {{ \Carbon\Carbon::parse($manualCheck->checked_at)->format('d M Y') }}
+                                                                @if($manualCheck->checked_by)
+                                                                    by {{ $manualCheck->checked_by }}
+                                                                @endif
+                                                            </p>
+                                                        </div>
+                                                    @endif
+                                                @endif
+
                                                 @if($polygonImport)
                                                     <div class="space-y-2 text-xs">
                                                         @if($polygonImport->status === 'completed')
@@ -222,6 +327,15 @@
                                                                 <span class="text-gray-600 dark:text-gray-400">Features:</span>
                                                                 <span class="text-gray-900 dark:text-gray-100 font-medium">{{ number_format($polygonImport->records_processed) }}</span>
                                                             </div>
+                                                            @php
+                                                                $onsVersion = $this->getOnsVersionDate($key);
+                                                            @endphp
+                                                            @if($onsVersion)
+                                                                <div>
+                                                                    <span class="text-gray-600 dark:text-gray-400">ONS Version:</span>
+                                                                    <span class="text-gray-900 dark:text-gray-100 font-medium">{{ \Carbon\Carbon::parse($onsVersion)->format('F Y') }}</span>
+                                                                </div>
+                                                            @endif
                                                         @elseif($polygonImport->status === 'processing')
                                                             <div>
                                                                 <span class="text-gray-600 dark:text-gray-400">Progress:</span>
@@ -505,13 +619,5 @@
 </div>
 
 <script>
-    document.addEventListener('livewire:initialized', () => {
-        Livewire.on('import-success', (event) => {
-            alert('✓ ' + event.message);
-        });
+    // Livewire event listeners (no alert popups - feedback shown through UI updates)
 
-        Livewire.on('import-error', (event) => {
-            alert('✗ Import failed: ' + event.message);
-        });
-    });
-</script>

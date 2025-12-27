@@ -10,9 +10,12 @@ use App\Models\Parish;
 use App\Models\PoliceForceArea;
 use App\Models\Region;
 use App\Models\Ward;
+use App\Services\CsvHeaderDetectorService;
+use App\Services\GeographyVersionService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use League\Csv\Reader;
 
 /**
  * Import ONS Geography Lookup Data
@@ -20,6 +23,8 @@ use Illuminate\Support\Facades\Storage;
  * This command imports geography lookup data from ONS Names and Codes CSV files.
  * It populates the lookup tables (regions, LADs, wards, parishes, etc.) that are
  * referenced by the ONSUD property data.
+ *
+ * Now supports year-agnostic imports using dynamic field detection.
  *
  * ONS publishes lookup files at: https://geoportal.statistics.gov.uk/
  *
@@ -39,6 +44,16 @@ class ImportGeographyLookupsCommand extends Command
     protected $description = 'Import ONS geography lookup data from CSV files';
 
     protected array $stats = [];
+
+    /**
+     * Constructor with service dependencies
+     */
+    public function __construct(
+        protected CsvHeaderDetectorService $headerDetector,
+        protected GeographyVersionService $versionService
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -140,16 +155,31 @@ class ImportGeographyLookupsCommand extends Command
 
     protected function importRegions(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle); // Skip header
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['region'])) {
+            throw new \Exception('Could not detect Region year code from CSV headers');
+        }
+
+        $this->info("Detected Region year code: {$yearCodes['region']}");
+        $this->versionService->validateImport('region', $yearCodes['region']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['region']];
+
                 Region::create([
-                    'rgn25cd' => $row[0],
-                    'rgn25nm' => $row[1],
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['region'],
+                    'rgn25cd' => $gssCode,
+                    'rgn25nm' => $record[$fieldMapping['region'] . 'NM'] ?? $record['RGN25NM'] ?? null,
                 ]);
                 $count++;
             }
@@ -157,25 +187,40 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('region', $yearCodes['region'], $count, basename($file));
 
         return $count;
     }
 
     protected function importCounties(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['county'])) {
+            throw new \Exception('Could not detect County year code from CSV headers');
+        }
+
+        $this->info("Detected County year code: {$yearCodes['county']}");
+        $this->versionService->validateImport('county', $yearCodes['county']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['county']];
+
                 County::create([
-                    'cty25cd' => $row[0],
-                    'cty25nm' => $row[1],
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['county'],
+                    'cty25cd' => $gssCode,
+                    'cty25nm' => $record[$fieldMapping['county'] . 'NM'] ?? $record['CTY25NM'] ?? null,
                 ]);
                 $count++;
             }
@@ -183,27 +228,45 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('county', $yearCodes['county'], $count, basename($file));
 
         return $count;
     }
 
     protected function importLads(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        // Detect year codes from CSV headers
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['lad'])) {
+            throw new \Exception('Could not detect LAD year code from CSV headers');
+        }
+
+        $this->info("Detected LAD year code: {$yearCodes['lad']}");
+
+        // Validate we're not importing older data
+        $this->versionService->validateImport('lad', $yearCodes['lad']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['lad']];
+
                 LocalAuthorityDistrict::create([
-                    'lad25cd' => $row[0],
-                    'lad25nm' => $row[1],
-                    'lad25nmw' => $row[2] ?? null,
-                    'rgn25cd' => $row[3] ?? null,
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['lad'],
+                    'lad25cd' => $gssCode, // Keep for property joins
+                    'lad25nm' => $record[$fieldMapping['lad'] . 'NM'] ?? $record['LAD25NM'] ?? null,
+                    'lad25nmw' => $record[$fieldMapping['lad'] . 'NMW'] ?? $record['LAD25NMW'] ?? null,
+                    'rgn25cd' => $record['RGN25CD'] ?? $record[isset($yearCodes['region']) ? $fieldMapping['region'] : 'RGN25CD'] ?? null,
                 ]);
                 $count++;
             }
@@ -211,58 +274,90 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        // Record successful import
+        $this->versionService->recordImport('lad', $yearCodes['lad'], $count, basename($file));
 
         return $count;
     }
 
     protected function importWards(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['ward'])) {
+            throw new \Exception('Could not detect Ward year code from CSV headers');
+        }
+
+        $this->info("Detected Ward year code: {$yearCodes['ward']}");
+        $this->versionService->validateImport('ward', $yearCodes['ward']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
                 try {
+                    $gssCode = $record[$fieldMapping['ward']];
+
                     Ward::create([
-                        'wd25cd' => $row[0],
-                        'wd25nm' => $row[1],
-                        'lad25cd' => $row[2],
+                        'gss_code' => $gssCode,
+                        'year_code' => $yearCodes['ward'],
+                        'wd25cd' => $gssCode,
+                        'wd25nm' => $record[$fieldMapping['ward'] . 'NM'] ?? $record['WD25NM'] ?? null,
+                        'lad25cd' => $record['LAD25CD'] ?? $record[isset($yearCodes['lad']) ? $fieldMapping['lad'] : 'LAD25CD'] ?? null,
                     ]);
                     $count++;
                 } catch (\Exception $e) {
-                    // Skip if foreign key constraint fails (LAD doesn't exist)
-                    $this->warn("Skipped ward {$row[0]}: LAD {$row[2]} not found");
+                    // Skip if foreign key constraint fails
+                    $wardCode = $record[$fieldMapping['ward']] ?? 'unknown';
+                    $this->warn("Skipped ward {$wardCode}: " . $e->getMessage());
                 }
             }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('ward', $yearCodes['ward'], $count, basename($file));
 
         return $count;
     }
 
     protected function importCeds(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['ced'])) {
+            throw new \Exception('Could not detect CED year code from CSV headers');
+        }
+
+        $this->info("Detected CED year code: {$yearCodes['ced']}");
+        $this->versionService->validateImport('ced', $yearCodes['ced']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['ced']];
+
                 CountyElectoralDivision::create([
-                    'ced25cd' => $row[0],
-                    'ced25nm' => $row[1],
-                    'cty25cd' => $row[2] ?? null,
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['ced'],
+                    'ced25cd' => $gssCode,
+                    'ced25nm' => $record[$fieldMapping['ced'] . 'NM'] ?? $record['CED25NM'] ?? null,
+                    'cty25cd' => $record['CTY25CD'] ?? $record[isset($yearCodes['county']) ? $fieldMapping['county'] : 'CTY25CD'] ?? null,
                 ]);
                 $count++;
             }
@@ -270,58 +365,88 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('ced', $yearCodes['ced'], $count, basename($file));
 
         return $count;
     }
 
     protected function importParishes(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['parish'])) {
+            throw new \Exception('Could not detect Parish year code from CSV headers');
+        }
+
+        $this->info("Detected Parish year code: {$yearCodes['parish']}");
+        $this->versionService->validateImport('parish', $yearCodes['parish']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
                 try {
+                    $gssCode = $record[$fieldMapping['parish']];
+
                     Parish::create([
-                        'parncp25cd' => $row[0],
-                        'parncp25nm' => $row[1],
-                        'parncp25nmw' => $row[2] ?? null,
-                        'lad25cd' => $row[3],
+                        'gss_code' => $gssCode,
+                        'year_code' => $yearCodes['parish'],
+                        'parncp25cd' => $gssCode,
+                        'parncp25nm' => $record[$fieldMapping['parish'] . 'NM'] ?? $record['PARNCP25NM'] ?? null,
+                        'parncp25nmw' => $record[$fieldMapping['parish'] . 'NMW'] ?? $record['PARNCP25NMW'] ?? null,
+                        'lad25cd' => $record['LAD25CD'] ?? $record[isset($yearCodes['lad']) ? $fieldMapping['lad'] : 'LAD25CD'] ?? null,
                     ]);
                     $count++;
                 } catch (\Exception $e) {
-                    // Skip if foreign key constraint fails (LAD doesn't exist)
-                    $this->warn("Skipped parish {$row[0]}: LAD {$row[3]} not found");
+                    $parishCode = $record[$fieldMapping['parish']] ?? 'unknown';
+                    $this->warn("Skipped parish {$parishCode}: " . $e->getMessage());
                 }
             }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('parish', $yearCodes['parish'], $count, basename($file));
 
         return $count;
     }
 
     protected function importConstituencies(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['constituency'])) {
+            throw new \Exception('Could not detect Constituency year code from CSV headers');
+        }
+
+        $this->info("Detected Constituency year code: {$yearCodes['constituency']}");
+        $this->versionService->validateImport('constituency', $yearCodes['constituency']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['constituency']];
+
                 Constituency::create([
-                    'pcon24cd' => $row[0],
-                    'pcon24nm' => $row[1],
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['constituency'],
+                    'pcon24cd' => $gssCode,
+                    'pcon24nm' => $record[$fieldMapping['constituency'] . 'NM'] ?? $record['PCON24NM'] ?? null,
                 ]);
                 $count++;
             }
@@ -329,25 +454,40 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('constituency', $yearCodes['constituency'], $count, basename($file));
 
         return $count;
     }
 
     protected function importPolice(string $file): int
     {
-        $count = 0;
-        $handle = fopen($file, 'r');
-        $header = fgetcsv($handle);
+        $csv = Reader::createFromPath($file, 'r');
+        $csv->setHeaderOffset(0);
+        $headers = $csv->getHeader();
 
+        $yearCodes = $this->headerDetector->detectYearCodes($headers);
+        $fieldMapping = $this->headerDetector->buildFieldMapping($headers);
+
+        if (!isset($yearCodes['pfa'])) {
+            throw new \Exception('Could not detect PFA year code from CSV headers');
+        }
+
+        $this->info("Detected PFA year code: {$yearCodes['pfa']}");
+        $this->versionService->validateImport('pfa', $yearCodes['pfa']);
+
+        $count = 0;
         DB::beginTransaction();
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv->getRecords() as $record) {
+                $gssCode = $record[$fieldMapping['pfa']];
+
                 PoliceForceArea::create([
-                    'pfa23cd' => $row[0],
-                    'pfa23nm' => $row[1],
+                    'gss_code' => $gssCode,
+                    'year_code' => $yearCodes['pfa'],
+                    'pfa23cd' => $gssCode,
+                    'pfa23nm' => $record[$fieldMapping['pfa'] . 'NM'] ?? $record['PFA23NM'] ?? null,
                 ]);
                 $count++;
             }
@@ -355,9 +495,9 @@ class ImportGeographyLookupsCommand extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
+
+        $this->versionService->recordImport('pfa', $yearCodes['pfa'], $count, basename($file));
 
         return $count;
     }

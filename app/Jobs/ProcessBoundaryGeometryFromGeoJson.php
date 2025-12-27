@@ -10,6 +10,8 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use JsonMachine\Items;
+use JsonMachine\JsonDecoder\ExtJsonDecoder;
 
 class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
 {
@@ -48,8 +50,11 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
                 throw new \RuntimeException("GeoJSON file not found: {$this->geoJsonPath}");
             }
 
+            // Extract ONS version date from filename
+            $onsVersionDate = $this->extractOnsVersionFromFilename(basename($this->geoJsonPath));
+
             // Process GeoJSON file
-            $this->processGeoJson($import);
+            $this->processGeoJson($import, $onsVersionDate);
 
             $import->markAsCompleted();
 
@@ -72,31 +77,117 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
     }
 
     /**
-     * Process GeoJSON file and import geometries
+     * Extract ONS version date from filename
+     * Examples:
+     *   - Wards_December_2024_Boundaries_EN_BFC.geojson → 2024-12-01
+     *   - WD_MAY_2025_UK_BFC_V2.geojson → 2025-05-01
+     *   - Police_Force_Areas_December_2023_EW_BUC.geojson → 2023-12-01
      */
-    private function processGeoJson(BoundaryImport $import): void
+    private function extractOnsVersionFromFilename(string $filename): string
     {
-        Log::info('Reading GeoJSON file', ['path' => $this->geoJsonPath]);
+        // Pattern 1: [Type]_[Month]_[Year]_Boundaries (full month name)
+        if (preg_match('/_([A-Za-z]+)_(\d{4})_Boundaries/i', $filename, $matches)) {
+            $month = $matches[1];
+            $year = $matches[2];
 
-        // Read entire GeoJSON file
-        $contents = File::get($this->geoJsonPath);
-        $geoJson = json_decode($contents, true);
-
-        if (!$geoJson || !isset($geoJson['features'])) {
-            throw new \RuntimeException("Invalid GeoJSON format: missing 'features' array");
+            $monthNum = $this->monthNameToNumber($month);
+            if ($monthNum) {
+                $versionDate = "{$year}-{$monthNum}-01";
+                Log::info('Extracted ONS version from filename (Pattern 1)', [
+                    'filename' => $filename,
+                    'version_date' => $versionDate,
+                ]);
+                return $versionDate;
+            }
         }
 
-        $features = $geoJson['features'];
-        $totalFeatures = count($features);
+        // Pattern 2: [TYPE]_[MONTH]_[YEAR]_[REGION]_[TYPE] (abbreviated month)
+        if (preg_match('/^[A-Z]+_([A-Z]{3})_(\d{4})_/i', $filename, $matches)) {
+            $month = $matches[1];
+            $year = $matches[2];
 
+            $monthNum = $this->monthAbbreviationToNumber($month);
+            if ($monthNum) {
+                $versionDate = "{$year}-{$monthNum}-01";
+                Log::info('Extracted ONS version from filename (Pattern 2)', [
+                    'filename' => $filename,
+                    'version_date' => $versionDate,
+                ]);
+                return $versionDate;
+            }
+        }
+
+        // Pattern 3: [Type]_[Month]_[Year]_[Region]_[BFC/BUC] (full month, no "Boundaries")
+        if (preg_match('/_([A-Za-z]+)_(\d{4})_[A-Z]{2}_B[UF]C/i', $filename, $matches)) {
+            $month = $matches[1];
+            $year = $matches[2];
+
+            $monthNum = $this->monthNameToNumber($month);
+            if ($monthNum) {
+                $versionDate = "{$year}-{$monthNum}-01";
+                Log::info('Extracted ONS version from filename (Pattern 3)', [
+                    'filename' => $filename,
+                    'version_date' => $versionDate,
+                ]);
+                return $versionDate;
+            }
+        }
+
+        // Fallback to current date if extraction fails
+        Log::warning('Could not extract ONS version from filename, using current date', [
+            'filename' => $filename,
+        ]);
+        return now()->toDateString();
+    }
+
+    /**
+     * Convert full month name to number
+     */
+    private function monthNameToNumber(string $month): ?string
+    {
+        $monthMap = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12',
+        ];
+
+        return $monthMap[ucfirst(strtolower($month))] ?? null;
+    }
+
+    /**
+     * Convert abbreviated month name to number
+     */
+    private function monthAbbreviationToNumber(string $month): ?string
+    {
+        $monthMap = [
+            'JAN' => '01', 'FEB' => '02', 'MAR' => '03', 'APR' => '04',
+            'MAY' => '05', 'JUN' => '06', 'JUL' => '07', 'AUG' => '08',
+            'SEP' => '09', 'OCT' => '10', 'NOV' => '11', 'DEC' => '12',
+        ];
+
+        return $monthMap[strtoupper($month)] ?? null;
+    }
+
+    /**
+     * Process GeoJSON file and import geometries using streaming
+     */
+    private function processGeoJson(BoundaryImport $import, string $onsVersionDate): void
+    {
+        Log::info('Streaming GeoJSON file', ['path' => $this->geoJsonPath]);
+
+        // Count total features first (quick pass through file)
+        $totalFeatures = $this->countFeatures($this->geoJsonPath);
         $import->update(['records_total' => $totalFeatures]);
 
-        Log::info("Processing {$totalFeatures} features from GeoJSON");
+        Log::info("Processing {$totalFeatures} features from GeoJSON using streaming");
 
         $geometryBatch = [];
         $nameBatch = [];
         $batchSize = 100; // Smaller batches for large geometry data
         $processed = 0;
+
+        // Stream through features without loading entire file into memory
+        $features = Items::fromFile($this->geoJsonPath, ['pointer' => '/features', 'decoder' => new ExtJsonDecoder(true)]);
 
         foreach ($features as $feature) {
             try {
@@ -136,7 +227,7 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
                     'area_hectares' => $areaHectares,
                     'bounding_box' => $boundingBox,
                     'source_file' => basename($this->geoJsonPath),
-                    'version_date' => now()->toDateString(),
+                    'version_date' => $onsVersionDate,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -148,7 +239,7 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
                     'name' => $name,
                     'name_welsh' => $this->extractWelshName($properties),
                     'source' => 'geojson',
-                    'version_date' => now()->toDateString(),
+                    'version_date' => $onsVersionDate,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -186,6 +277,21 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
     }
 
     /**
+     * Count total features in GeoJSON file using streaming (memory efficient)
+     */
+    private function countFeatures(string $path): int
+    {
+        $count = 0;
+        $features = Items::fromFile($path, ['pointer' => '/features', 'decoder' => new ExtJsonDecoder(true)]);
+
+        foreach ($features as $feature) {
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
      * Extract GSS code from properties (handles various naming conventions)
      */
     private function extractGssCode(array $properties): ?string
@@ -206,6 +312,7 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
             '/^SPR\d{2}CD$/i',      // Scottish Parliament Regions
             '/^SENC\d{2}CD$/i',     // Welsh Senedd Constituencies
             '/^SENER\d{2}CD$/i',    // Welsh Senedd Regions
+            '/^PFA\d{2}CD$/i',      // Police Force Areas
         ];
 
         // First try pattern matching
@@ -249,6 +356,7 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
             '/^SPR\d{2}NM$/i',      // Scottish Parliament Regions
             '/^SENC\d{2}NM$/i',     // Welsh Senedd Constituencies
             '/^SENER\d{2}NM$/i',    // Welsh Senedd Regions
+            '/^PFA\d{2}NM$/i',      // Police Force Areas
         ];
 
         // First try pattern matching

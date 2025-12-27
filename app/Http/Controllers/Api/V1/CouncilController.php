@@ -88,7 +88,7 @@ class CouncilController extends Controller
     public function districts(string $countyCode): JsonResponse
     {
         // Verify the county code exists and is actually a county
-        $county = LocalAuthorityDistrict::where('lad25cd', $countyCode)->first();
+        $county = LocalAuthorityDistrict::where('gss_code', $countyCode)->first();
 
         if (!$county) {
             return response()->json([
@@ -112,12 +112,12 @@ class CouncilController extends Controller
         // Note: This returns ALL districts as there's no direct county->district relationship in the data
         // Users will need to filter based on their knowledge of geography or we'd need additional lookup data
         $districts = LocalAuthorityDistrict::query()
-            ->where('lad25cd', 'like', 'E07%')
+            ->where('gss_code', 'like', 'E07%')
             ->orderBy('lad25nm')
             ->get()
             ->map(function ($district) use ($countyCode) {
                 return [
-                    'gss_code' => $district->lad25cd,
+                    'gss_code' => $district->gss_code,
                     'name' => $district->lad25nm,
                     'name_welsh' => $district->lad25nmw,
                     'county_code' => $countyCode,
@@ -141,7 +141,7 @@ class CouncilController extends Controller
     public function divisions(string $councilCode): JsonResponse
     {
         // Verify the council exists
-        $council = LocalAuthorityDistrict::where('lad25cd', $councilCode)->first();
+        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -159,7 +159,11 @@ class CouncilController extends Controller
             ->distinct()
             ->pluck('ced25cd');
 
-        $divisions = CountyElectoralDivision::whereIn('ced25cd', $cedCodes)
+        $divisions = CountyElectoralDivision::whereIn('gss_code', function($query) use ($cedCodes) {
+                $query->select('gss_code')
+                    ->from('county_electoral_divisions')
+                    ->whereIn('ced25cd', $cedCodes);
+            })
             ->orderBy('ced25nm')
             ->get()
             ->map(function ($division) {
@@ -171,7 +175,7 @@ class CouncilController extends Controller
                     ->values();
 
                 return [
-                    'gss_code' => $division->ced25cd,
+                    'gss_code' => $division->gss_code,
                     'name' => $division->ced25nm,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
@@ -182,7 +186,7 @@ class CouncilController extends Controller
             'data' => $divisions,
             'meta' => [
                 'council_code' => $councilCode,
-                'council_name' => $council->lad25nm,
+                'council_name' => $county->lad25nm,
                 'division_count' => $divisions->count(),
             ],
         ]);
@@ -194,7 +198,7 @@ class CouncilController extends Controller
     public function wards(string $councilCode): JsonResponse
     {
         // Verify the council exists
-        $council = LocalAuthorityDistrict::where('lad25cd', $councilCode)->first();
+        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -218,7 +222,7 @@ class CouncilController extends Controller
                     ->values();
 
                 return [
-                    'gss_code' => $ward->wd25cd,
+                    'gss_code' => $ward->gss_code,
                     'name' => $ward->wd25nm,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
@@ -242,7 +246,7 @@ class CouncilController extends Controller
     public function parishes(string $councilCode): JsonResponse
     {
         // Verify the council exists
-        $council = LocalAuthorityDistrict::where('lad25cd', $councilCode)->first();
+        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -266,7 +270,7 @@ class CouncilController extends Controller
                     ->values();
 
                 return [
-                    'gss_code' => $parish->parncp25cd,
+                    'gss_code' => $parish->gss_code,
                     'name' => $parish->parncp25nm,
                     'name_welsh' => $parish->parncp25nmw,
                     'postcode_count' => $postcodes->count(),

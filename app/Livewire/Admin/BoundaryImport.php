@@ -23,57 +23,75 @@ class BoundaryImport extends Component
     public $useUrl = 0; // Use 0/1 to match radio button values
 
     public array $boundaryTypes = [
-        'wards' => 'Electoral Ward Boundaries',
-        'ced' => 'County Electoral Division Boundaries',
-        'lad' => 'Local Authority District Boundaries',
-        'lpa' => 'Local Planning Authority Boundaries',
-        'parish' => 'Parish Boundaries',
+        // Core Geography - Upload in this order (parent → child)
         'region' => 'Region Boundaries',
         'counties' => 'Counties and Unitary Authorities',
-        'combined_authorities' => 'Combined Authorities',
+        'lad' => 'Local Authority District Boundaries',
+        'wards' => 'Electoral Ward Boundaries',
+        'parishes' => 'Parish Boundaries',
+        'ced' => 'County Electoral Division Boundaries',
         'constituencies' => 'Westminster Parliamentary Constituencies',
+        'police_force_areas' => 'Police Force Area Boundaries',
+
+        // Essential Relationships - Upload after core geography
+        'ward_hierarchy_lookup' => 'Ward → LAD → County → CED Lookup',
+        'parish_lookup' => 'Parish → Ward → LAD Lookup',
+
+        // Optional/Additional Boundaries
+        'lpa' => 'Local Planning Authority Boundaries',
+        'combined_authorities' => 'Combined Authorities',
         'scottish_constituencies' => 'Scottish Parliament Constituencies',
         'scottish_regions' => 'Scottish Parliament Regions',
         'senedd_constituencies' => 'Welsh Senedd Constituencies',
         'senedd_regions' => 'Welsh Senedd Regions',
-        'ward_hierarchy_lookup' => 'Ward → LAD → County → CED Lookup',
-        'parish_lookup' => 'Parish → Ward → LAD Lookup',
     ];
 
     public array $boundaryDescriptions = [
-        'wards' => 'Electoral wards for local council elections',
-        'ced' => 'Divisions for county council elections',
-        'lad' => 'Local authority districts and unitary authorities',
-        'lpa' => 'Local planning authority areas',
-        'parish' => 'Civil parish and community councils',
+        // Core Geography
         'region' => 'Government office regions of England',
-        'counties' => 'Upper-tier local authorities',
-        'combined_authorities' => 'Groups of local authorities with devolved powers',
+        'counties' => 'Upper-tier local authorities (county councils)',
+        'lad' => 'Local authority districts and unitary authorities',
+        'wards' => 'Electoral wards for local council elections',
+        'parishes' => 'Civil parish and community councils',
+        'ced' => 'Divisions for county council elections',
         'constituencies' => 'UK Parliament constituencies (Westminster)',
+        'police_force_areas' => 'Police force areas for England and Wales',
+
+        // Essential Relationships
+        'ward_hierarchy_lookup' => 'Hierarchical relationships between Wards, LADs, Counties, and CEDs',
+        'parish_lookup' => 'Relationships between Parishes, Wards, and LADs',
+
+        // Optional/Additional
+        'lpa' => 'Local planning authority areas',
+        'combined_authorities' => 'Groups of local authorities with devolved powers',
         'scottish_constituencies' => 'Constituencies for Scottish Parliament elections',
         'scottish_regions' => 'Regional list areas for Scottish Parliament',
         'senedd_constituencies' => 'Constituencies for Welsh Senedd elections',
         'senedd_regions' => 'Regional list areas for Welsh Senedd',
-        'ward_hierarchy_lookup' => 'Hierarchical relationships between Wards, LADs, Counties, and CEDs',
-        'parish_lookup' => 'Relationships between Parishes, Wards, and LADs',
     ];
 
     public array $onsPageUrls = [
-        'wards' => 'https://geoportal.statistics.gov.uk/search?q=Wards%20December%202024%20Boundaries',
-        'ced' => 'https://geoportal.statistics.gov.uk/search?q=County%20Electoral%20Divisions%20May%202025%20Boundaries',
-        'lad' => 'https://geoportal.statistics.gov.uk/search?q=Local%20Authority%20Districts%20April%202025%20Boundaries',
-        'lpa' => 'https://geoportal.statistics.gov.uk/search?q=Local%20Planning%20Authorities%20April%202023%20Boundaries',
-        'parish' => 'https://geoportal.statistics.gov.uk/search?q=Parishes%20April%202025%20Boundaries',
+        // Core Geography
         'region' => 'https://geoportal.statistics.gov.uk/search?q=Regions%20May%202025%20Boundaries',
         'counties' => 'https://geoportal.statistics.gov.uk/search?q=Counties%20December%202024%20Boundaries',
-        'combined_authorities' => 'https://geoportal.statistics.gov.uk/search?q=Combined%20Authorities%20May%202024%20Boundaries',
+        'lad' => 'https://geoportal.statistics.gov.uk/search?q=Local%20Authority%20Districts%20April%202025%20Boundaries',
+        'wards' => 'https://geoportal.statistics.gov.uk/search?q=Wards%20December%202024%20Boundaries',
+        'parishes' => 'https://geoportal.statistics.gov.uk/search?q=Parishes%20April%202025%20Boundaries',
+        'ced' => 'https://geoportal.statistics.gov.uk/search?q=County%20Electoral%20Divisions%20May%202025%20Boundaries',
         'constituencies' => 'https://geoportal.statistics.gov.uk/search?q=Westminster%20Parliamentary%20Constituencies%20July%202024%20Boundaries',
+        'police_force_areas' => 'https://geoportal.statistics.gov.uk/search?q=Police%20Force%20Areas%20December%202023%20Boundaries',
+
+        // Essential Relationships
+        'ward_hierarchy_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Ward%20to%20LAD%20to%20County%20Lookup',
+        'parish_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Parish%20to%20Ward%20to%20LAD%20Lookup',
+
+        // Optional/Additional
+        'lpa' => 'https://geoportal.statistics.gov.uk/search?q=Local%20Planning%20Authorities%20April%202023%20Boundaries',
+        'combined_authorities' => 'https://geoportal.statistics.gov.uk/search?q=Combined%20Authorities%20May%202024%20Boundaries',
         'scottish_constituencies' => 'https://geoportal.statistics.gov.uk/search?q=Scottish%20Parliament%20Constituencies%20May%202011%20Boundaries',
         'scottish_regions' => 'https://geoportal.statistics.gov.uk/search?q=Scottish%20Parliament%20Regions%20May%202011%20Boundaries',
         'senedd_constituencies' => 'https://geoportal.statistics.gov.uk/search?q=Senedd%20Constituencies%20May%202024%20Boundaries',
         'senedd_regions' => 'https://geoportal.statistics.gov.uk/search?q=Senedd%20Regions%20May%202024%20Boundaries',
-        'ward_hierarchy_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Ward%20to%20LAD%20to%20County%20Lookup',
-        'parish_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Parish%20to%20Ward%20to%20LAD%20Lookup',
     ];
 
     public array $existingFiles = [
@@ -143,6 +161,142 @@ class BoundaryImport extends Component
 
         // Fall back to CSV name imports
         return $this->getImportStatus($boundaryType, 'names');
+    }
+
+    public function getOnsVersionDate($boundaryType): ?string
+    {
+        $geometry = \Illuminate\Support\Facades\DB::table('boundary_geometries')
+            ->where('boundary_type', $boundaryType)
+            ->orderBy('version_date', 'desc')
+            ->first();
+
+        return $geometry?->version_date;
+    }
+
+    /**
+     * Check if a boundary type is outdated based on ONS update schedule
+     */
+    public function isOutdated($boundaryType): bool
+    {
+        // Update schedule for each boundary type (from CheckForBoundaryUpdates command)
+        $updateSchedule = [
+            'wards' => ['month' => 'December', 'frequency' => 'annual'],
+            'parishes' => ['month' => 'April', 'frequency' => 'annual'],
+            'lad' => ['month' => 'April', 'frequency' => 'annual'],
+            'ced' => ['month' => 'May', 'frequency' => 'annual'],
+            'constituencies' => ['month' => 'July', 'frequency' => 'varies'],
+            'police_force_areas' => ['month' => 'December', 'frequency' => 'varies'],
+            'region' => ['month' => 'May', 'frequency' => 'annual'],
+            'counties' => ['month' => 'December', 'frequency' => 'annual'],
+        ];
+
+        // Get current version from database
+        $currentVersion = $this->getOnsVersionDate($boundaryType);
+
+        if (!$currentVersion || !isset($updateSchedule[$boundaryType])) {
+            return false;
+        }
+
+        // Calculate expected latest version based on schedule
+        $schedule = $updateSchedule[$boundaryType];
+        $expectedMonth = $schedule['month'];
+        $currentYear = now()->year;
+        $currentMonth = now()->month;
+
+        $monthMap = [
+            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
+            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
+            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12,
+        ];
+
+        $expectedMonthNum = $monthMap[$expectedMonth] ?? null;
+
+        if (!$expectedMonthNum) {
+            return false;
+        }
+
+        // Determine expected version based on current date
+        if ($currentMonth >= $expectedMonthNum) {
+            $expectedYear = $currentYear;
+        } else {
+            $expectedYear = $currentYear - 1;
+        }
+
+        $expectedVersion = sprintf('%d-%02d-01', $expectedYear, $expectedMonthNum);
+
+        // Check if user has manually confirmed no update available for this expected version
+        $manualCheck = \Illuminate\Support\Facades\DB::table('boundary_update_checks')
+            ->where('boundary_type', $boundaryType)
+            ->where('expected_version', $expectedVersion)
+            ->first();
+
+        if ($manualCheck) {
+            // User has confirmed they checked and no update was available
+            return false;
+        }
+
+        // Compare versions
+        try {
+            $currentDate = new \DateTime($currentVersion);
+            $expectedDate = new \DateTime($expectedVersion);
+
+            return $expectedDate > $currentDate;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Mark that user checked for update but none was available
+     */
+    public function markAsChecked($boundaryType): void
+    {
+        $updateSchedule = [
+            'wards' => ['month' => 'December'],
+            'parishes' => ['month' => 'April'],
+            'lad' => ['month' => 'April'],
+            'ced' => ['month' => 'May'],
+            'constituencies' => ['month' => 'July'],
+            'police_force_areas' => ['month' => 'December'],
+            'region' => ['month' => 'May'],
+            'counties' => ['month' => 'December'],
+        ];
+
+        if (!isset($updateSchedule[$boundaryType])) {
+            return;
+        }
+
+        $schedule = $updateSchedule[$boundaryType];
+        $monthMap = [
+            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
+            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
+            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12,
+        ];
+
+        $expectedMonthNum = $monthMap[$schedule['month']] ?? null;
+        if (!$expectedMonthNum) {
+            return;
+        }
+
+        $currentYear = now()->year;
+        $currentMonth = now()->month;
+        $expectedYear = ($currentMonth >= $expectedMonthNum) ? $currentYear : $currentYear - 1;
+        $expectedVersion = sprintf('%d-%02d-01', $expectedYear, $expectedMonthNum);
+
+        \Illuminate\Support\Facades\DB::table('boundary_update_checks')->updateOrInsert(
+            [
+                'boundary_type' => $boundaryType,
+                'expected_version' => $expectedVersion,
+            ],
+            [
+                'checked_at' => now(),
+                'checked_by' => auth()->user()?->name ?? 'System',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+
+        $this->dispatch('check-recorded', message: 'Recorded: No update available for ' . $this->boundaryTypes[$boundaryType]);
     }
 
     private function formatFileSize($bytes)
@@ -231,15 +385,6 @@ class BoundaryImport extends Component
                     'boundary_type' => $this->boundaryType,
                 ]);
 
-                // Extract filename from URL or create one
-                $urlParts = parse_url($this->downloadUrl);
-                $filename = basename($urlParts['path'] ?? 'boundary-download.zip');
-
-                // Ensure it has an extension
-                if (!preg_match('/\.(csv|json|geojson|zip)$/i', $filename)) {
-                    $filename .= '.zip';
-                }
-
                 // Download the file
                 $response = Http::timeout(3600)->get($this->downloadUrl);
 
@@ -247,9 +392,40 @@ class BoundaryImport extends Component
                     throw new \Exception('Failed to download file from URL. HTTP Status: ' . $response->status());
                 }
 
+                // Detect file type from content
+                $body = $response->body();
+                $firstChars = substr($body, 0, 100);
+
+                // Extract filename from URL
+                $urlParts = parse_url($this->downloadUrl);
+                $baseFilename = basename($urlParts['path'] ?? 'boundary-download');
+
+                // Remove any existing extension
+                $baseFilename = preg_replace('/\.(csv|json|geojson|zip)$/i', '', $baseFilename);
+
+                // Determine extension from content type or content
+                $contentType = $response->header('Content-Type');
+
+                if (str_starts_with(trim($firstChars), '{') || str_starts_with(trim($firstChars), '[')) {
+                    // JSON/GeoJSON content
+                    $extension = 'geojson';
+                } elseif (str_contains($contentType, 'json')) {
+                    $extension = 'geojson';
+                } elseif (str_contains($contentType, 'csv') || str_starts_with($firstChars, '"') || preg_match('/^[A-Z0-9_]+,/i', $firstChars)) {
+                    $extension = 'csv';
+                } elseif (str_contains($contentType, 'zip') || bin2hex(substr($body, 0, 4)) === '504b0304') {
+                    // ZIP magic bytes: PK.. (50 4B 03 04)
+                    $extension = 'zip';
+                } else {
+                    // Default based on boundary type expectations
+                    $extension = str_ends_with($this->boundaryType, '_lookup') ? 'csv' : 'geojson';
+                }
+
+                $filename = $baseFilename . '.' . $extension;
+
                 // Store the downloaded file
                 $path = 'boundaries/' . $this->boundaryType . '/' . $filename;
-                Storage::put($path, $response->body());
+                Storage::put($path, $body);
 
                 Log::info('Boundary file downloaded successfully', [
                     'path' => $path,

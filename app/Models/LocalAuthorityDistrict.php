@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Represents UK local authority districts with optional Welsh language names.
  * Stores approximately 350 LAD records from ONS lookup data.
+ *
+ * Primary key is now 'gss_code' (year-agnostic) for consistent identification.
+ * 'lad25cd' is retained for backward compatibility and property joins.
  */
 class LocalAuthorityDistrict extends Model
 {
@@ -24,7 +27,7 @@ class LocalAuthorityDistrict extends Model
      *
      * @var string
      */
-    protected $primaryKey = 'lad25cd';
+    protected $primaryKey = 'gss_code';
 
     /**
      * The "type" of the auto-incrementing ID.
@@ -46,11 +49,24 @@ class LocalAuthorityDistrict extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'gss_code',
+        'year_code',
         'lad25cd',
         'lad25nm',
         'lad25nmw',
         'rgn25cd',
     ];
+
+    /**
+     * Find a local authority district by GSS code.
+     *
+     * @param string $code GSS code to search for
+     * @return static|null
+     */
+    public static function findByGssCode(string $code): ?static
+    {
+        return static::where('gss_code', $code)->first();
+    }
 
     /**
      * Get the region that owns the LAD.

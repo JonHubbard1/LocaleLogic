@@ -19,7 +19,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        //
+        // Check for ONS boundary updates every Monday at 9am
+        $schedule->command('boundaries:check-updates --notify')
+            ->weekly()
+            ->mondays()
+            ->at('09:00')
+            ->timezone('Europe/London');
     }
 
     /**

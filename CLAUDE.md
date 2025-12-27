@@ -103,14 +103,14 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 ## Foundational Context
 This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-- php - 8.3.28
+- php - 8.3.29
+- laravel/breeze (BREEZE) - v2
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
 - laravel/sanctum (SANCTUM) - v4
 - livewire/flux (FLUXUI_FREE) - v2
 - livewire/flux-pro (FLUXUI_PRO) - v2
 - livewire/livewire (LIVEWIRE) - v3
-- laravel/breeze (BREEZE) - v2
 - laravel/mcp (MCP) - v0
 - phpunit/phpunit (PHPUNIT) - v11
 - alpinejs (ALPINEJS) - v3

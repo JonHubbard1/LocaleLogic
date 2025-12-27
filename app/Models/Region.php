@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Represents UK geographical regions (England, Wales, Scotland).
  * Stores approximately 12 region records from ONS lookup data.
+ *
+ * Primary key is now 'gss_code' (year-agnostic) for consistent identification.
+ * 'rgn25cd' is retained for backward compatibility and joins.
  */
 class Region extends Model
 {
@@ -24,7 +27,7 @@ class Region extends Model
      *
      * @var string
      */
-    protected $primaryKey = 'rgn25cd';
+    protected $primaryKey = 'gss_code';
 
     /**
      * The "type" of the auto-incrementing ID.
@@ -46,9 +49,22 @@ class Region extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'gss_code',
+        'year_code',
         'rgn25cd',
         'rgn25nm',
     ];
+
+    /**
+     * Find a region by GSS code.
+     *
+     * @param string $code GSS code to search for
+     * @return static|null
+     */
+    public static function findByGssCode(string $code): ?static
+    {
+        return static::where('gss_code', $code)->first();
+    }
 
     /**
      * Get the local authority districts in this region.
