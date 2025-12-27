@@ -144,7 +144,12 @@ class ProcessWardHierarchyLookup implements ShouldQueue
         // ONS CSV files contain duplicate rows that need to be filtered out
         $uniqueRows = [];
         foreach ($batch as $row) {
-            $key = $row['wd_code'] . '|' . ($row['ced_code'] ?? 'NULL') . '|' . $row['version_date'];
+            // Handle NULL values explicitly - convert to empty string for key consistency
+            $cedCode = $row['ced_code'] ?? '';
+            $wdCode = $row['wd_code'] ?? '';
+            $versionDate = $row['version_date'] ?? '';
+
+            $key = $wdCode . '||' . $cedCode . '||' . $versionDate;
             $uniqueRows[$key] = $row;
         }
 
@@ -158,10 +163,37 @@ class ProcessWardHierarchyLookup implements ShouldQueue
             ]);
         }
 
-        DB::table('ward_hierarchy_lookups')->upsert(
-            $dedupedBatch,
-            ['wd_code', 'ced_code', 'version_date'],
-            ['wd_name', 'lad_code', 'lad_name', 'cty_code', 'cty_name', 'ced_name', 'updated_at']
-        );
+        try {
+            DB::table('ward_hierarchy_lookups')->upsert(
+                $dedupedBatch,
+                ['wd_code', 'ced_code', 'version_date'],
+                ['wd_name', 'lad_code', 'lad_name', 'cty_code', 'cty_name', 'ced_name', 'updated_at']
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            // If batch upsert fails with cardinality violation, insert row by row
+            if (str_contains($e->getMessage(), 'cardinality violation') || str_contains($e->getMessage(), '21000')) {
+                Log::warning('Batch upsert failed with cardinality violation, falling back to row-by-row insert', [
+                    'batch_size' => count($dedupedBatch),
+                    'error' => $e->getMessage(),
+                ]);
+
+                foreach ($dedupedBatch as $row) {
+                    try {
+                        DB::table('ward_hierarchy_lookups')->upsert(
+                            [$row],
+                            ['wd_code', 'ced_code', 'version_date'],
+                            ['wd_name', 'lad_code', 'lad_name', 'cty_code', 'cty_name', 'ced_name', 'updated_at']
+                        );
+                    } catch (\Exception $rowError) {
+                        Log::error('Failed to insert individual row', [
+                            'row' => $row,
+                            'error' => $rowError->getMessage(),
+                        ]);
+                    }
+                }
+            } else {
+                throw $e;
+            }
+        }
     }
 }
