@@ -385,51 +385,44 @@ class BoundaryImport extends Component
                     'boundary_type' => $this->boundaryType,
                 ]);
 
-                // Download the file
-                $response = Http::timeout(3600)->get($this->downloadUrl);
+                // Extract filename from URL first
+                $urlParts = parse_url($this->downloadUrl);
+                $baseFilename = basename($urlParts['path'] ?? 'boundary-download');
+                $baseFilename = preg_replace('/\.(csv|json|geojson|zip)$/i', '', $baseFilename);
+
+                // Default extension based on boundary type
+                $extension = str_ends_with($this->boundaryType, '_lookup') ? 'csv' : 'geojson';
+                $filename = $baseFilename . '.' . $extension;
+                $path = 'boundaries/' . $this->boundaryType . '/' . $filename;
+
+                // Create storage directory if it doesn't exist
+                $storagePath = Storage::path('boundaries/' . $this->boundaryType);
+                if (!is_dir($storagePath)) {
+                    mkdir($storagePath, 0755, true);
+                }
+
+                // Stream download directly to disk - doesn't load into memory
+                $fullPath = Storage::path($path);
+                $response = Http::withOptions([
+                    'sink' => $fullPath,
+                    'timeout' => 3600,
+                    'connect_timeout' => 60,
+                ])->get($this->downloadUrl);
 
                 if (!$response->successful()) {
+                    // Clean up partial file
+                    if (file_exists($fullPath)) {
+                        unlink($fullPath);
+                    }
                     throw new \Exception('Failed to download file from URL. HTTP Status: ' . $response->status());
                 }
 
-                // Detect file type from content
-                $body = $response->body();
-                $firstChars = substr($body, 0, 100);
+                // Get file size for logging
+                $fileSize = file_exists($fullPath) ? filesize($fullPath) : 0;
 
-                // Extract filename from URL
-                $urlParts = parse_url($this->downloadUrl);
-                $baseFilename = basename($urlParts['path'] ?? 'boundary-download');
-
-                // Remove any existing extension
-                $baseFilename = preg_replace('/\.(csv|json|geojson|zip)$/i', '', $baseFilename);
-
-                // Determine extension from content type or content
-                $contentType = $response->header('Content-Type');
-
-                if (str_starts_with(trim($firstChars), '{') || str_starts_with(trim($firstChars), '[')) {
-                    // JSON/GeoJSON content
-                    $extension = 'geojson';
-                } elseif (str_contains($contentType, 'json')) {
-                    $extension = 'geojson';
-                } elseif (str_contains($contentType, 'csv') || str_starts_with($firstChars, '"') || preg_match('/^[A-Z0-9_]+,/i', $firstChars)) {
-                    $extension = 'csv';
-                } elseif (str_contains($contentType, 'zip') || bin2hex(substr($body, 0, 4)) === '504b0304') {
-                    // ZIP magic bytes: PK.. (50 4B 03 04)
-                    $extension = 'zip';
-                } else {
-                    // Default based on boundary type expectations
-                    $extension = str_ends_with($this->boundaryType, '_lookup') ? 'csv' : 'geojson';
-                }
-
-                $filename = $baseFilename . '.' . $extension;
-
-                // Store the downloaded file
-                $path = 'boundaries/' . $this->boundaryType . '/' . $filename;
-                Storage::put($path, $body);
-
-                Log::info('Boundary file downloaded successfully', [
+                Log::info('Boundary file downloaded successfully via streaming', [
                     'path' => $path,
-                    'size' => strlen($response->body()),
+                    'size' => $fileSize,
                 ]);
 
                 // Dispatch import job
