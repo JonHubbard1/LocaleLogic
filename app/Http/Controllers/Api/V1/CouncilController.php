@@ -38,6 +38,7 @@ class CouncilController extends Controller
                   ->orWhere('gss_code', 'like', 'W06%')  // Welsh unitary
                   ->orWhere('gss_code', 'like', 'S12%'); // Scottish unitary
             })
+            ->groupBy('gss_code', 'name', 'name_welsh')  // Remove duplicates
             ->orderBy('name');
 
         // Filter by council type if specified
