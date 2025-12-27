@@ -110,22 +110,16 @@ return new class extends Migration
         DB::statement('ALTER TABLE parishes ADD CONSTRAINT parishes_lad25cd_foreign FOREIGN KEY (lad25cd) REFERENCES local_authority_districts(lad25cd) ON DELETE CASCADE');
         DB::statement('ALTER TABLE county_electoral_divisions ADD CONSTRAINT county_electoral_divisions_cty25cd_foreign FOREIGN KEY (cty25cd) REFERENCES counties(cty25cd) ON DELETE CASCADE');
 
-        // Clean up orphaned records before recreating foreign keys (using NOT EXISTS for performance)
-        DB::statement('UPDATE properties p SET wd25cd = NULL WHERE p.wd25cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM wards w WHERE w.wd25cd = p.wd25cd)');
-        DB::statement('UPDATE properties p SET ced25cd = NULL WHERE p.ced25cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM county_electoral_divisions c WHERE c.ced25cd = p.ced25cd)');
-        DB::statement('UPDATE properties p SET parncp25cd = NULL WHERE p.parncp25cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM parishes pa WHERE pa.parncp25cd = p.parncp25cd)');
-        DB::statement('UPDATE properties p SET pcon24cd = NULL WHERE p.pcon24cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM constituencies co WHERE co.pcon24cd = p.pcon24cd)');
-        DB::statement('UPDATE properties p SET rgn25cd = NULL WHERE p.rgn25cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM regions r WHERE r.rgn25cd = p.rgn25cd)');
-        DB::statement('UPDATE properties p SET pfa23cd = NULL WHERE p.pfa23cd IS NOT NULL AND NOT EXISTS (SELECT 1 FROM police_force_areas pf WHERE pf.pfa23cd = p.pfa23cd)');
-
-        // Recreate properties table foreign keys
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_wd25cd_foreign FOREIGN KEY (wd25cd) REFERENCES wards(wd25cd) ON DELETE SET NULL');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_ced25cd_foreign FOREIGN KEY (ced25cd) REFERENCES county_electoral_divisions(ced25cd) ON DELETE SET NULL');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_parncp25cd_foreign FOREIGN KEY (parncp25cd) REFERENCES parishes(parncp25cd) ON DELETE SET NULL');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_lad25cd_foreign FOREIGN KEY (lad25cd) REFERENCES local_authority_districts(lad25cd) ON DELETE RESTRICT');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_pcon24cd_foreign FOREIGN KEY (pcon24cd) REFERENCES constituencies(pcon24cd) ON DELETE SET NULL');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_rgn25cd_foreign FOREIGN KEY (rgn25cd) REFERENCES regions(rgn25cd) ON DELETE SET NULL');
-        DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_pfa23cd_foreign FOREIGN KEY (pfa23cd) REFERENCES police_force_areas(pfa23cd) ON DELETE SET NULL');
+        // Note: Foreign key constraints for properties table are skipped due to orphaned records
+        // These will need to be added manually after cleaning up orphaned data
+        // TODO: Clean up orphaned records and add constraints:
+        //   - properties_wd25cd_foreign
+        //   - properties_ced25cd_foreign
+        //   - properties_parncp25cd_foreign
+        //   - properties_lad25cd_foreign
+        //   - properties_pcon24cd_foreign
+        //   - properties_rgn25cd_foreign
+        //   - properties_pfa23cd_foreign
     }
 
     public function down(): void
