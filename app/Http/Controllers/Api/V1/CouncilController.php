@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\BoundaryName;
 use App\Models\CountyElectoralDivision;
 use App\Models\LocalAuthorityDistrict;
 use App\Models\Parish;
@@ -20,21 +21,36 @@ class CouncilController extends Controller
     {
         $type = request()->query('type');
 
-        $query = LocalAuthorityDistrict::query()
-            ->select('lad25cd', 'lad25nm', 'lad25nmw')
-            ->orderBy('lad25nm');
+        // Get all unique LAD codes from properties with their names from boundary_names
+        $query = BoundaryName::query()
+            ->select('gss_code', 'name', 'name_welsh')
+            ->whereIn('gss_code', function($subquery) {
+                $subquery->select('lad25cd')
+                    ->from('properties')
+                    ->whereNotNull('lad25cd')
+                    ->distinct();
+            })
+            ->where(function($q) {
+                $q->where('gss_code', 'like', 'E06%')  // Unitary authorities
+                  ->orWhere('gss_code', 'like', 'E07%')  // Districts
+                  ->orWhere('gss_code', 'like', 'E09%')  // London boroughs
+                  ->orWhere('gss_code', 'like', 'E10%')  // Counties
+                  ->orWhere('gss_code', 'like', 'W06%')  // Welsh unitary
+                  ->orWhere('gss_code', 'like', 'S12%'); // Scottish unitary
+            })
+            ->orderBy('name');
 
         // Filter by council type if specified
         if ($type) {
-            $query->where('lad25cd', 'like', $this->getGssCodePattern($type));
+            $query->where('gss_code', 'like', $this->getGssCodePattern($type));
         }
 
         $councils = $query->get()->map(function ($council) {
             return [
-                'gss_code' => $council->lad25cd,
-                'name' => $council->lad25nm,
-                'name_welsh' => $council->lad25nmw,
-                'type' => $this->getCouncilType($council->lad25cd),
+                'gss_code' => $council->gss_code,
+                'name' => $council->name,
+                'name_welsh' => $council->name_welsh,
+                'type' => $this->getCouncilType($council->gss_code),
             ];
         });
 
