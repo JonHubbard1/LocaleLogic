@@ -110,6 +110,14 @@ return new class extends Migration
         DB::statement('ALTER TABLE parishes ADD CONSTRAINT parishes_lad25cd_foreign FOREIGN KEY (lad25cd) REFERENCES local_authority_districts(lad25cd) ON DELETE CASCADE');
         DB::statement('ALTER TABLE county_electoral_divisions ADD CONSTRAINT county_electoral_divisions_cty25cd_foreign FOREIGN KEY (cty25cd) REFERENCES counties(cty25cd) ON DELETE CASCADE');
 
+        // Clean up orphaned records before recreating foreign keys
+        DB::statement('UPDATE properties SET wd25cd = NULL WHERE wd25cd IS NOT NULL AND wd25cd NOT IN (SELECT wd25cd FROM wards)');
+        DB::statement('UPDATE properties SET ced25cd = NULL WHERE ced25cd IS NOT NULL AND ced25cd NOT IN (SELECT ced25cd FROM county_electoral_divisions)');
+        DB::statement('UPDATE properties SET parncp25cd = NULL WHERE parncp25cd IS NOT NULL AND parncp25cd NOT IN (SELECT parncp25cd FROM parishes)');
+        DB::statement('UPDATE properties SET pcon24cd = NULL WHERE pcon24cd IS NOT NULL AND pcon24cd NOT IN (SELECT pcon24cd FROM constituencies)');
+        DB::statement('UPDATE properties SET rgn25cd = NULL WHERE rgn25cd IS NOT NULL AND rgn25cd NOT IN (SELECT rgn25cd FROM regions)');
+        DB::statement('UPDATE properties SET pfa23cd = NULL WHERE pfa23cd IS NOT NULL AND pfa23cd NOT IN (SELECT pfa23cd FROM police_force_areas)');
+
         // Recreate properties table foreign keys
         DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_wd25cd_foreign FOREIGN KEY (wd25cd) REFERENCES wards(wd25cd) ON DELETE SET NULL');
         DB::statement('ALTER TABLE properties ADD CONSTRAINT properties_ced25cd_foreign FOREIGN KEY (ced25cd) REFERENCES county_electoral_divisions(ced25cd) ON DELETE SET NULL');
