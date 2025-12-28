@@ -136,22 +136,14 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all CEDs (County Electoral Divisions) for this council from boundary_names
-        // CEDs have GSS codes starting with E58
-        $divisions = BoundaryName::select('gss_code', 'name', 'name_welsh')
-            ->where('gss_code', 'like', 'E58%')
-            ->where(function($query) use ($councilCode) {
-                // Filter CEDs that belong to this council area
-                // We check if properties exist with both this council code and the CED code
-                $query->whereExists(function($subquery) use ($councilCode) {
-                    $subquery->select('uprn')
-                        ->from('properties')
-                        ->where('lad25cd', $councilCode)
-                        ->whereColumn('ced25cd', 'boundary_names.gss_code');
-                });
-            })
-            ->groupBy('gss_code', 'name', 'name_welsh')
-            ->orderBy('name')
+        // Get all CEDs (County Electoral Divisions) for this council from ward_hierarchy_lookups
+        // This gives us the official ONS mapping of CEDs to counties
+        $divisions = \DB::table('ward_hierarchy_lookups')
+            ->select('ced_code as gss_code', 'ced_name as name')
+            ->where('cty_code', $councilCode)
+            ->whereNotNull('ced_code')
+            ->distinct()
+            ->orderBy('ced_name')
             ->get()
             ->map(function ($division) {
                 // Get all unique postcodes in this division
@@ -164,7 +156,6 @@ class CouncilController extends Controller
                 return [
                     'gss_code' => $division->gss_code,
                     'name' => $division->name,
-                    'name_welsh' => $division->name_welsh,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
                 ];
@@ -197,21 +188,13 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all wards for this council from boundary_names
-        // Wards have GSS codes starting with E05
-        $wards = BoundaryName::select('gss_code', 'name', 'name_welsh')
-            ->where('gss_code', 'like', 'E05%')
-            ->where(function($query) use ($councilCode) {
-                // Filter wards that belong to this council area
-                $query->whereExists(function($subquery) use ($councilCode) {
-                    $subquery->select('uprn')
-                        ->from('properties')
-                        ->where('lad25cd', $councilCode)
-                        ->whereColumn('wd25cd', 'boundary_names.gss_code');
-                });
-            })
-            ->groupBy('gss_code', 'name', 'name_welsh')
-            ->orderBy('name')
+        // Get all wards for this council from ward_hierarchy_lookups
+        // This gives us the official ONS mapping of wards to councils
+        $wards = \DB::table('ward_hierarchy_lookups')
+            ->select('wd_code as gss_code', 'wd_name as name')
+            ->where('lad_code', $councilCode)
+            ->distinct()
+            ->orderBy('wd_name')
             ->get()
             ->map(function ($ward) {
                 // Get all unique postcodes in this ward
@@ -224,7 +207,6 @@ class CouncilController extends Controller
                 return [
                     'gss_code' => $ward->gss_code,
                     'name' => $ward->name,
-                    'name_welsh' => $ward->name_welsh,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
                 ];
@@ -258,24 +240,13 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all parishes for this council from boundary_names
-        // Parishes have GSS codes starting with E04 or E43
-        $parishes = BoundaryName::select('gss_code', 'name', 'name_welsh')
-            ->where(function($query) {
-                $query->where('gss_code', 'like', 'E04%')
-                      ->orWhere('gss_code', 'like', 'E43%');
-            })
-            ->where(function($query) use ($councilCode) {
-                // Filter parishes that belong to this council area
-                $query->whereExists(function($subquery) use ($councilCode) {
-                    $subquery->select('uprn')
-                        ->from('properties')
-                        ->where('lad25cd', $councilCode)
-                        ->whereColumn('parncp25cd', 'boundary_names.gss_code');
-                });
-            })
-            ->groupBy('gss_code', 'name', 'name_welsh')
-            ->orderBy('name')
+        // Get all parishes for this council from parish_lookups
+        // This gives us the official ONS mapping of parishes to councils
+        $parishes = \DB::table('parish_lookups')
+            ->select('par_code as gss_code', 'par_name as name', 'par_name_welsh as name_welsh')
+            ->where('lad_code', $councilCode)
+            ->distinct()
+            ->orderBy('par_name')
             ->get()
             ->map(function ($parish) {
                 // Get all unique postcodes in this parish
