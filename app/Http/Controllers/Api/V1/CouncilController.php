@@ -124,8 +124,8 @@ class CouncilController extends Controller
      */
     public function divisions(string $councilCode): JsonResponse
     {
-        // Verify the council exists
-        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
+        // Verify the council exists in boundary_names
+        $council = BoundaryName::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -136,23 +136,25 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all CEDs where properties exist with this LAD code
-        // We find CEDs by looking at properties that have both this LAD and a CED code
-        $cedCodes = Property::where('lad25cd', $councilCode)
-            ->whereNotNull('ced25cd')
-            ->distinct()
-            ->pluck('ced25cd');
-
-        $divisions = CountyElectoralDivision::whereIn('gss_code', function($query) use ($cedCodes) {
-                $query->select('gss_code')
-                    ->from('county_electoral_divisions')
-                    ->whereIn('ced25cd', $cedCodes);
+        // Get all CEDs (County Electoral Divisions) for this council from boundary_names
+        // CEDs have GSS codes starting with E58
+        $divisions = BoundaryName::where('gss_code', 'like', 'E58%')
+            ->where(function($query) use ($councilCode) {
+                // Filter CEDs that belong to this council area
+                // We check if properties exist with both this council code and the CED code
+                $query->whereExists(function($subquery) use ($councilCode) {
+                    $subquery->select('uprn')
+                        ->from('properties')
+                        ->where('lad25cd', $councilCode)
+                        ->whereColumn('ced25cd', 'boundary_names.gss_code');
+                });
             })
-            ->orderBy('ced25nm')
+            ->groupBy('gss_code', 'name', 'name_welsh')
+            ->orderBy('name')
             ->get()
             ->map(function ($division) {
                 // Get all unique postcodes in this division
-                $postcodes = Property::where('ced25cd', $division->ced25cd)
+                $postcodes = Property::where('ced25cd', $division->gss_code)
                     ->distinct()
                     ->pluck('pcds')
                     ->sort()
@@ -160,7 +162,8 @@ class CouncilController extends Controller
 
                 return [
                     'gss_code' => $division->gss_code,
-                    'name' => $division->ced25nm,
+                    'name' => $division->name,
+                    'name_welsh' => $division->name_welsh,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
                 ];
@@ -170,7 +173,7 @@ class CouncilController extends Controller
             'data' => $divisions,
             'meta' => [
                 'council_code' => $councilCode,
-                'council_name' => $county->lad25nm,
+                'council_name' => $council->name,
                 'division_count' => $divisions->count(),
             ],
         ]);
@@ -181,8 +184,8 @@ class CouncilController extends Controller
      */
     public function wards(string $councilCode): JsonResponse
     {
-        // Verify the council exists
-        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
+        // Verify the council exists in boundary_names
+        $council = BoundaryName::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -193,13 +196,24 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all wards in this council with their postcodes
-        $wards = Ward::where('lad25cd', $councilCode)
-            ->orderBy('wd25nm')
+        // Get all wards for this council from boundary_names
+        // Wards have GSS codes starting with E05
+        $wards = BoundaryName::where('gss_code', 'like', 'E05%')
+            ->where(function($query) use ($councilCode) {
+                // Filter wards that belong to this council area
+                $query->whereExists(function($subquery) use ($councilCode) {
+                    $subquery->select('uprn')
+                        ->from('properties')
+                        ->where('lad25cd', $councilCode)
+                        ->whereColumn('wd25cd', 'boundary_names.gss_code');
+                });
+            })
+            ->groupBy('gss_code', 'name', 'name_welsh')
+            ->orderBy('name')
             ->get()
             ->map(function ($ward) {
                 // Get all unique postcodes in this ward
-                $postcodes = Property::where('wd25cd', $ward->wd25cd)
+                $postcodes = Property::where('wd25cd', $ward->gss_code)
                     ->distinct()
                     ->pluck('pcds')
                     ->sort()
@@ -207,7 +221,8 @@ class CouncilController extends Controller
 
                 return [
                     'gss_code' => $ward->gss_code,
-                    'name' => $ward->wd25nm,
+                    'name' => $ward->name,
+                    'name_welsh' => $ward->name_welsh,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
                 ];
@@ -217,7 +232,7 @@ class CouncilController extends Controller
             'data' => $wards,
             'meta' => [
                 'council_code' => $councilCode,
-                'council_name' => $council->lad25nm,
+                'council_name' => $council->name,
                 'council_type' => $this->getCouncilType($councilCode),
                 'ward_count' => $wards->count(),
             ],
@@ -229,8 +244,8 @@ class CouncilController extends Controller
      */
     public function parishes(string $councilCode): JsonResponse
     {
-        // Verify the council exists
-        $council = LocalAuthorityDistrict::where('gss_code', $councilCode)->first();
+        // Verify the council exists in boundary_names
+        $council = BoundaryName::where('gss_code', $councilCode)->first();
 
         if (!$council) {
             return response()->json([
@@ -241,13 +256,27 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all parishes in this council area with their postcodes
-        $parishes = Parish::where('lad25cd', $councilCode)
-            ->orderBy('parncp25nm')
+        // Get all parishes for this council from boundary_names
+        // Parishes have GSS codes starting with E04 or E43
+        $parishes = BoundaryName::where(function($query) {
+                $query->where('gss_code', 'like', 'E04%')
+                      ->orWhere('gss_code', 'like', 'E43%');
+            })
+            ->where(function($query) use ($councilCode) {
+                // Filter parishes that belong to this council area
+                $query->whereExists(function($subquery) use ($councilCode) {
+                    $subquery->select('uprn')
+                        ->from('properties')
+                        ->where('lad25cd', $councilCode)
+                        ->whereColumn('parncp25cd', 'boundary_names.gss_code');
+                });
+            })
+            ->groupBy('gss_code', 'name', 'name_welsh')
+            ->orderBy('name')
             ->get()
             ->map(function ($parish) {
                 // Get all unique postcodes in this parish
-                $postcodes = Property::where('parncp25cd', $parish->parncp25cd)
+                $postcodes = Property::where('parncp25cd', $parish->gss_code)
                     ->distinct()
                     ->pluck('pcds')
                     ->sort()
@@ -255,8 +284,8 @@ class CouncilController extends Controller
 
                 return [
                     'gss_code' => $parish->gss_code,
-                    'name' => $parish->parncp25nm,
-                    'name_welsh' => $parish->parncp25nmw,
+                    'name' => $parish->name,
+                    'name_welsh' => $parish->name_welsh,
                     'postcode_count' => $postcodes->count(),
                     'postcodes' => $postcodes,
                 ];
@@ -266,7 +295,7 @@ class CouncilController extends Controller
             'data' => $parishes,
             'meta' => [
                 'council_code' => $councilCode,
-                'council_name' => $council->lad25nm,
+                'council_name' => $council->name,
                 'council_type' => $this->getCouncilType($councilCode),
                 'parish_count' => $parishes->count(),
             ],
