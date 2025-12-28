@@ -10,6 +10,7 @@ use App\Models\Parish;
 use App\Models\Property;
 use App\Models\Ward;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class CouncilController extends Controller
 {
@@ -138,7 +139,7 @@ class CouncilController extends Controller
 
         // Get all CEDs (County Electoral Divisions) for this council from ward_hierarchy_lookups
         // This gives us the official ONS mapping of CEDs to counties
-        $divisions = \DB::table('ward_hierarchy_lookups')
+        $divisions = DB::table('ward_hierarchy_lookups')
             ->select('ced_code as gss_code', 'ced_name as name')
             ->where('cty_code', $councilCode)
             ->whereNotNull('ced_code')
@@ -190,7 +191,7 @@ class CouncilController extends Controller
 
         // Get all wards for this council from ward_hierarchy_lookups
         // This gives us the official ONS mapping of wards to councils
-        $wards = \DB::table('ward_hierarchy_lookups')
+        $wards = DB::table('ward_hierarchy_lookups')
             ->select('wd_code as gss_code', 'wd_name as name')
             ->where('lad_code', $councilCode)
             ->distinct()
@@ -242,7 +243,7 @@ class CouncilController extends Controller
 
         // Get all parishes for this council from parish_lookups
         // This gives us the official ONS mapping of parishes to councils
-        $parishes = \DB::table('parish_lookups')
+        $parishes = DB::table('parish_lookups')
             ->select('par_code as gss_code', 'par_name as name', 'par_name_welsh as name_welsh')
             ->where('lad_code', $councilCode)
             ->distinct()
