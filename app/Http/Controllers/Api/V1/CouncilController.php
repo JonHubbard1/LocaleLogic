@@ -21,25 +21,9 @@ class CouncilController extends Controller
     {
         $type = request()->query('type');
 
-        // Build the base query for councils that have properties
+        // Build the base query for councils
         $query = BoundaryName::query()
             ->select('gss_code', 'name', 'name_welsh')
-            ->where(function($q) {
-                // LAD codes from properties (districts, unitaries, London boroughs)
-                $q->whereIn('gss_code', function($subquery) {
-                    $subquery->select('lad25cd')
-                        ->from('properties')
-                        ->whereNotNull('lad25cd')
-                        ->distinct();
-                })
-                // County codes from CEDs (counties via electoral divisions)
-                ->orWhereIn('gss_code', function($subquery) {
-                    $subquery->select('cty25cd')
-                        ->from('county_electoral_divisions')
-                        ->whereNotNull('cty25cd')
-                        ->distinct();
-                });
-            })
             ->where(function($q) {
                 $q->where('gss_code', 'like', 'E06%')  // Unitary authorities
                   ->orWhere('gss_code', 'like', 'E07%')  // Districts
