@@ -138,7 +138,8 @@ class CouncilController extends Controller
 
         // Get all CEDs (County Electoral Divisions) for this council from boundary_names
         // CEDs have GSS codes starting with E58
-        $divisions = BoundaryName::where('gss_code', 'like', 'E58%')
+        $divisions = BoundaryName::select('gss_code', 'name', 'name_welsh')
+            ->where('gss_code', 'like', 'E58%')
             ->where(function($query) use ($councilCode) {
                 // Filter CEDs that belong to this council area
                 // We check if properties exist with both this council code and the CED code
@@ -198,7 +199,8 @@ class CouncilController extends Controller
 
         // Get all wards for this council from boundary_names
         // Wards have GSS codes starting with E05
-        $wards = BoundaryName::where('gss_code', 'like', 'E05%')
+        $wards = BoundaryName::select('gss_code', 'name', 'name_welsh')
+            ->where('gss_code', 'like', 'E05%')
             ->where(function($query) use ($councilCode) {
                 // Filter wards that belong to this council area
                 $query->whereExists(function($subquery) use ($councilCode) {
@@ -258,7 +260,8 @@ class CouncilController extends Controller
 
         // Get all parishes for this council from boundary_names
         // Parishes have GSS codes starting with E04 or E43
-        $parishes = BoundaryName::where(function($query) {
+        $parishes = BoundaryName::select('gss_code', 'name', 'name_welsh')
+            ->where(function($query) {
                 $query->where('gss_code', 'like', 'E04%')
                       ->orWhere('gss_code', 'like', 'E43%');
             })
