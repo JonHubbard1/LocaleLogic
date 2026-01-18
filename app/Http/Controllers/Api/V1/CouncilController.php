@@ -317,12 +317,21 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all unique postcodes in this ward
+        // Get all unique postcodes with their centroid coordinates
         $postcodes = Property::where('wd25cd', $wardCode)
-            ->distinct()
-            ->pluck('pcds')
-            ->sort()
-            ->values();
+            ->select('pcds')
+            ->selectRaw('AVG(lat) as latitude')
+            ->selectRaw('AVG(lng) as longitude')
+            ->selectRaw('COUNT(*) as property_count')
+            ->groupBy('pcds')
+            ->orderBy('pcds')
+            ->get()
+            ->map(fn($p) => [
+                'postcode' => $p->pcds,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+                'property_count' => $p->property_count,
+            ]);
 
         return response()->json([
             'data' => $postcodes,
@@ -356,12 +365,21 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all unique postcodes in this division
+        // Get all unique postcodes with their centroid coordinates
         $postcodes = Property::where('ced25cd', $divisionCode)
-            ->distinct()
-            ->pluck('pcds')
-            ->sort()
-            ->values();
+            ->select('pcds')
+            ->selectRaw('AVG(lat) as latitude')
+            ->selectRaw('AVG(lng) as longitude')
+            ->selectRaw('COUNT(*) as property_count')
+            ->groupBy('pcds')
+            ->orderBy('pcds')
+            ->get()
+            ->map(fn($p) => [
+                'postcode' => $p->pcds,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+                'property_count' => $p->property_count,
+            ]);
 
         return response()->json([
             'data' => $postcodes,
@@ -395,12 +413,21 @@ class CouncilController extends Controller
             ], 404);
         }
 
-        // Get all unique postcodes in this parish
+        // Get all unique postcodes with their centroid coordinates
         $postcodes = Property::where('parncp25cd', $parishCode)
-            ->distinct()
-            ->pluck('pcds')
-            ->sort()
-            ->values();
+            ->select('pcds')
+            ->selectRaw('AVG(lat) as latitude')
+            ->selectRaw('AVG(lng) as longitude')
+            ->selectRaw('COUNT(*) as property_count')
+            ->groupBy('pcds')
+            ->orderBy('pcds')
+            ->get()
+            ->map(fn($p) => [
+                'postcode' => $p->pcds,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+                'property_count' => $p->property_count,
+            ]);
 
         return response()->json([
             'data' => $postcodes,
