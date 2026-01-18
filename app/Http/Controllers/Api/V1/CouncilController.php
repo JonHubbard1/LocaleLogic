@@ -454,4 +454,224 @@ class CouncilController extends Controller
             default => '%',
         };
     }
+
+    /**
+     * Get postcodes within a ward boundary using PostGIS point-in-polygon.
+     * This uses the actual boundary geometry rather than pre-computed ONS assignments.
+     */
+    public function wardPostcodesSpatial(string $wardCode): JsonResponse
+    {
+        // Verify the ward exists in boundary_geometries
+        $boundary = DB::table('boundary_geometries')
+            ->where('boundary_type', 'ward')
+            ->where('gss_code', $wardCode)
+            ->first();
+
+        if (!$boundary) {
+            return response()->json([
+                'error' => [
+                    'code' => 'WARD_NOT_FOUND',
+                    'message' => "Ward boundary with code '{$wardCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all postcodes within the boundary using PostGIS ST_Contains
+        $postcodes = DB::select("
+            SELECT
+                p.pcds as postcode,
+                p.lat as latitude,
+                p.lng as longitude
+            FROM postcodes p
+            JOIN boundary_geometries bg ON bg.boundary_type = 'ward' AND bg.gss_code = ?
+            WHERE p.geom IS NOT NULL
+              AND bg.geom IS NOT NULL
+              AND ST_Contains(bg.geom, p.geom)
+              AND p.doterm IS NULL
+            ORDER BY p.pcds
+        ", [$wardCode]);
+
+        return response()->json([
+            'data' => collect($postcodes)->map(fn($p) => [
+                'postcode' => $p->postcode,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+            ]),
+            'meta' => [
+                'ward_code' => $wardCode,
+                'ward_name' => $boundary->name,
+                'count' => count($postcodes),
+                'method' => 'spatial',
+                'note' => 'Postcodes determined by point-in-polygon on actual boundary geometry',
+            ],
+        ]);
+    }
+
+    /**
+     * Get postcodes within a parish boundary using PostGIS point-in-polygon.
+     * This uses the actual boundary geometry rather than pre-computed ONS assignments.
+     */
+    public function parishPostcodesSpatial(string $parishCode): JsonResponse
+    {
+        // Verify the parish exists in boundary_geometries
+        $boundary = DB::table('boundary_geometries')
+            ->where('boundary_type', 'parish')
+            ->where('gss_code', $parishCode)
+            ->first();
+
+        if (!$boundary) {
+            return response()->json([
+                'error' => [
+                    'code' => 'PARISH_NOT_FOUND',
+                    'message' => "Parish boundary with code '{$parishCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all postcodes within the boundary using PostGIS ST_Contains
+        $postcodes = DB::select("
+            SELECT
+                p.pcds as postcode,
+                p.lat as latitude,
+                p.lng as longitude
+            FROM postcodes p
+            JOIN boundary_geometries bg ON bg.boundary_type = 'parish' AND bg.gss_code = ?
+            WHERE p.geom IS NOT NULL
+              AND bg.geom IS NOT NULL
+              AND ST_Contains(bg.geom, p.geom)
+              AND p.doterm IS NULL
+            ORDER BY p.pcds
+        ", [$parishCode]);
+
+        return response()->json([
+            'data' => collect($postcodes)->map(fn($p) => [
+                'postcode' => $p->postcode,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+            ]),
+            'meta' => [
+                'parish_code' => $parishCode,
+                'parish_name' => $boundary->name,
+                'count' => count($postcodes),
+                'method' => 'spatial',
+                'note' => 'Postcodes determined by point-in-polygon on actual boundary geometry',
+            ],
+        ]);
+    }
+
+    /**
+     * Get postcodes within a division boundary using PostGIS point-in-polygon.
+     * This uses the actual boundary geometry rather than pre-computed ONS assignments.
+     */
+    public function divisionPostcodesSpatial(string $divisionCode): JsonResponse
+    {
+        // Verify the division exists in boundary_geometries
+        $boundary = DB::table('boundary_geometries')
+            ->where('boundary_type', 'ced')
+            ->where('gss_code', $divisionCode)
+            ->first();
+
+        if (!$boundary) {
+            return response()->json([
+                'error' => [
+                    'code' => 'DIVISION_NOT_FOUND',
+                    'message' => "Division boundary with code '{$divisionCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all postcodes within the boundary using PostGIS ST_Contains
+        $postcodes = DB::select("
+            SELECT
+                p.pcds as postcode,
+                p.lat as latitude,
+                p.lng as longitude
+            FROM postcodes p
+            JOIN boundary_geometries bg ON bg.boundary_type = 'ced' AND bg.gss_code = ?
+            WHERE p.geom IS NOT NULL
+              AND bg.geom IS NOT NULL
+              AND ST_Contains(bg.geom, p.geom)
+              AND p.doterm IS NULL
+            ORDER BY p.pcds
+        ", [$divisionCode]);
+
+        return response()->json([
+            'data' => collect($postcodes)->map(fn($p) => [
+                'postcode' => $p->postcode,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+            ]),
+            'meta' => [
+                'division_code' => $divisionCode,
+                'division_name' => $boundary->name,
+                'count' => count($postcodes),
+                'method' => 'spatial',
+                'note' => 'Postcodes determined by point-in-polygon on actual boundary geometry',
+            ],
+        ]);
+    }
+
+    /**
+     * Generic endpoint to get postcodes within any boundary using PostGIS.
+     * Supports: ward, parish, ced (division), lad (council), pfa (police force area)
+     */
+    public function boundaryPostcodesSpatial(string $boundaryType, string $gssCode): JsonResponse
+    {
+        // Validate boundary type
+        $validTypes = ['ward', 'parish', 'ced', 'lad', 'pfa', 'constituency'];
+        if (!in_array($boundaryType, $validTypes)) {
+            return response()->json([
+                'error' => [
+                    'code' => 'INVALID_BOUNDARY_TYPE',
+                    'message' => "Invalid boundary type '{$boundaryType}'. Valid types: " . implode(', ', $validTypes),
+                ],
+            ], 422);
+        }
+
+        // Verify the boundary exists
+        $boundary = DB::table('boundary_geometries')
+            ->where('boundary_type', $boundaryType)
+            ->where('gss_code', $gssCode)
+            ->first();
+
+        if (!$boundary) {
+            return response()->json([
+                'error' => [
+                    'code' => 'BOUNDARY_NOT_FOUND',
+                    'message' => "Boundary with type '{$boundaryType}' and code '{$gssCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all postcodes within the boundary using PostGIS ST_Contains
+        $postcodes = DB::select("
+            SELECT
+                p.pcds as postcode,
+                p.lat as latitude,
+                p.lng as longitude
+            FROM postcodes p
+            JOIN boundary_geometries bg ON bg.boundary_type = ? AND bg.gss_code = ?
+            WHERE p.geom IS NOT NULL
+              AND bg.geom IS NOT NULL
+              AND ST_Contains(bg.geom, p.geom)
+              AND p.doterm IS NULL
+            ORDER BY p.pcds
+        ", [$boundaryType, $gssCode]);
+
+        return response()->json([
+            'data' => collect($postcodes)->map(fn($p) => [
+                'postcode' => $p->postcode,
+                'latitude' => round((float) $p->latitude, 6),
+                'longitude' => round((float) $p->longitude, 6),
+            ]),
+            'meta' => [
+                'boundary_type' => $boundaryType,
+                'gss_code' => $gssCode,
+                'boundary_name' => $boundary->name,
+                'count' => count($postcodes),
+                'method' => 'spatial',
+                'note' => 'Postcodes determined by point-in-polygon on actual boundary geometry',
+            ],
+        ]);
+    }
 }
