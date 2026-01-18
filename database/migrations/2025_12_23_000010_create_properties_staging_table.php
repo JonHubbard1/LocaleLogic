@@ -48,41 +48,11 @@ return new class extends Migration
             // NO timestamps - identical to properties table
             // NO soft deletes - out of scope per spec
 
-            // Foreign key constraints - identical to properties table
-            $table->foreign('wd25cd')
-                  ->references('wd25cd')
-                  ->on('wards')
-                  ->onDelete('set null');
-
-            $table->foreign('ced25cd')
-                  ->references('ced25cd')
-                  ->on('county_electoral_divisions')
-                  ->onDelete('set null');
-
-            $table->foreign('parncp25cd')
-                  ->references('parncp25cd')
-                  ->on('parishes')
-                  ->onDelete('set null');
-
-            $table->foreign('lad25cd')
-                  ->references('lad25cd')
-                  ->on('local_authority_districts')
-                  ->onDelete('restrict');
-
-            $table->foreign('pcon24cd')
-                  ->references('pcon24cd')
-                  ->on('constituencies')
-                  ->onDelete('set null');
-
-            $table->foreign('rgn25cd')
-                  ->references('rgn25cd')
-                  ->on('regions')
-                  ->onDelete('set null');
-
-            $table->foreign('pfa23cd')
-                  ->references('pfa23cd')
-                  ->on('police_force_areas')
-                  ->onDelete('set null');
+            // NOTE: NO foreign key constraints on staging table
+            // Staging table accepts raw ONSUD data without validation
+            // FK constraints would reject valid ward codes (E05, W05, S13) that
+            // aren't in the wards table (which may only have partial data)
+            // The production properties table may add FK constraints if needed
         });
 
         // NOTE: Indexes are NOT created initially

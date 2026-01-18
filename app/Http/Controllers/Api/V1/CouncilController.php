@@ -298,6 +298,124 @@ class CouncilController extends Controller
     }
 
     /**
+     * Get postcodes for a specific ward
+     */
+    public function wardPostcodes(string $wardCode): JsonResponse
+    {
+        // Verify the ward exists
+        $ward = DB::table('ward_hierarchy_lookups')
+            ->select('wd_code', 'wd_name', 'lad_code', 'lad_name')
+            ->where('wd_code', $wardCode)
+            ->first();
+
+        if (!$ward) {
+            return response()->json([
+                'error' => [
+                    'code' => 'WARD_NOT_FOUND',
+                    'message' => "Ward with code '{$wardCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all unique postcodes in this ward
+        $postcodes = Property::where('wd25cd', $wardCode)
+            ->distinct()
+            ->pluck('pcds')
+            ->sort()
+            ->values();
+
+        return response()->json([
+            'data' => $postcodes,
+            'meta' => [
+                'ward_code' => $wardCode,
+                'ward_name' => $ward->wd_name,
+                'council_code' => $ward->lad_code,
+                'council_name' => $ward->lad_name,
+                'count' => $postcodes->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Get postcodes for a specific division
+     */
+    public function divisionPostcodes(string $divisionCode): JsonResponse
+    {
+        // Verify the division exists
+        $division = DB::table('ward_hierarchy_lookups')
+            ->select('ced_code', 'ced_name', 'cty_code', 'cty_name')
+            ->where('ced_code', $divisionCode)
+            ->first();
+
+        if (!$division) {
+            return response()->json([
+                'error' => [
+                    'code' => 'DIVISION_NOT_FOUND',
+                    'message' => "Division with code '{$divisionCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all unique postcodes in this division
+        $postcodes = Property::where('ced25cd', $divisionCode)
+            ->distinct()
+            ->pluck('pcds')
+            ->sort()
+            ->values();
+
+        return response()->json([
+            'data' => $postcodes,
+            'meta' => [
+                'division_code' => $divisionCode,
+                'division_name' => $division->ced_name,
+                'county_code' => $division->cty_code,
+                'county_name' => $division->cty_name,
+                'count' => $postcodes->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Get postcodes for a specific parish
+     */
+    public function parishPostcodes(string $parishCode): JsonResponse
+    {
+        // Verify the parish exists
+        $parish = DB::table('parish_lookups')
+            ->select('par_code', 'par_name', 'par_name_welsh', 'lad_code', 'lad_name')
+            ->where('par_code', $parishCode)
+            ->first();
+
+        if (!$parish) {
+            return response()->json([
+                'error' => [
+                    'code' => 'PARISH_NOT_FOUND',
+                    'message' => "Parish with code '{$parishCode}' not found",
+                ],
+            ], 404);
+        }
+
+        // Get all unique postcodes in this parish
+        $postcodes = Property::where('parncp25cd', $parishCode)
+            ->distinct()
+            ->pluck('pcds')
+            ->sort()
+            ->values();
+
+        return response()->json([
+            'data' => $postcodes,
+            'meta' => [
+                'parish_code' => $parishCode,
+                'parish_name' => $parish->par_name,
+                'parish_name_welsh' => $parish->par_name_welsh,
+                'council_code' => $parish->lad_code,
+                'council_name' => $parish->lad_name,
+                'count' => $postcodes->count(),
+            ],
+        ]);
+    }
+
+    /**
      * Helper: Get GSS code pattern for council type filter
      */
     private function getGssCodePattern(string $type): string

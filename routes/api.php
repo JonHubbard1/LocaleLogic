@@ -26,4 +26,9 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('councils/{countyCode}/divisions', [CouncilController::class, 'divisions']);
     Route::get('councils/{councilCode}/wards', [CouncilController::class, 'wards']);
     Route::get('councils/{councilCode}/parishes', [CouncilController::class, 'parishes']);
+
+    // Ward/Division/Parish Postcodes Endpoints
+    Route::get('wards/{wardCode}/postcodes', [CouncilController::class, 'wardPostcodes']);
+    Route::get('divisions/{divisionCode}/postcodes', [CouncilController::class, 'divisionPostcodes']);
+    Route::get('parishes/{parishCode}/postcodes', [CouncilController::class, 'parishPostcodes']);
 });
