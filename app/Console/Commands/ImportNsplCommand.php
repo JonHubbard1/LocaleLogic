@@ -212,11 +212,14 @@ class ImportNsplCommand extends Command
 
     private function insertBatch(array $batch): void
     {
+        // Get database column names (values of the column map)
+        $updateColumns = array_values($this->columnMap);
+
         try {
             DB::table('postcodes')->upsert(
                 $batch,
                 ['pcd7'],
-                array_keys($this->columnMap)
+                $updateColumns
             );
             $this->stats['successful'] += count($batch);
         } catch (\Exception $e) {
@@ -226,7 +229,7 @@ class ImportNsplCommand extends Command
                     DB::table('postcodes')->upsert(
                         [$record],
                         ['pcd7'],
-                        array_keys($this->columnMap)
+                        $updateColumns
                     );
                     $this->stats['successful']++;
                 } catch (\Exception $e2) {
