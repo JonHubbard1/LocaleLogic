@@ -463,7 +463,7 @@ class CouncilController extends Controller
     {
         // Verify the ward exists in boundary_geometries
         $boundary = DB::table('boundary_geometries')
-            ->where('boundary_type', 'ward')
+            ->where('boundary_type', 'wards')
             ->where('gss_code', $wardCode)
             ->first();
 
@@ -483,7 +483,7 @@ class CouncilController extends Controller
                 p.lat as latitude,
                 p.lng as longitude
             FROM postcodes p
-            JOIN boundary_geometries bg ON bg.boundary_type = 'ward' AND bg.gss_code = ?
+            JOIN boundary_geometries bg ON bg.boundary_type = 'wards' AND bg.gss_code = ?
             WHERE p.geom IS NOT NULL
               AND bg.geom IS NOT NULL
               AND ST_Contains(bg.geom, p.geom)
@@ -515,7 +515,7 @@ class CouncilController extends Controller
     {
         // Verify the parish exists in boundary_geometries
         $boundary = DB::table('boundary_geometries')
-            ->where('boundary_type', 'parish')
+            ->where('boundary_type', 'parishes')
             ->where('gss_code', $parishCode)
             ->first();
 
@@ -535,7 +535,7 @@ class CouncilController extends Controller
                 p.lat as latitude,
                 p.lng as longitude
             FROM postcodes p
-            JOIN boundary_geometries bg ON bg.boundary_type = 'parish' AND bg.gss_code = ?
+            JOIN boundary_geometries bg ON bg.boundary_type = 'parishes' AND bg.gss_code = ?
             WHERE p.geom IS NOT NULL
               AND bg.geom IS NOT NULL
               AND ST_Contains(bg.geom, p.geom)
