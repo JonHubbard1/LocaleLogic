@@ -193,14 +193,28 @@ class FixWardDataCommand extends Command
         $wardIndex = array_search('WD25CD', $header);
 
         if ($uprnIndex === false || $wardIndex === false) {
+            $this->error("    Missing UPRN or WD25CD column in CSV");
             fclose($file);
             return 0;
         }
 
+        // Count total rows for progress
+        $totalRows = 0;
+        while (fgetcsv($file) !== false) {
+            $totalRows++;
+        }
+        rewind($file);
+        fgetcsv($file); // Skip header again
+
+        $this->line("    Total rows: " . number_format($totalRows));
+
         $batch = [];
         $totalUpdated = 0;
+        $rowsProcessed = 0;
+        $lastProgressUpdate = 0;
 
         while (($row = fgetcsv($file)) !== false) {
+            $rowsProcessed++;
             $uprn = $row[$uprnIndex] ?? null;
             $wardCode = $row[$wardIndex] ?? null;
 
@@ -212,6 +226,13 @@ class FixWardDataCommand extends Command
                 $updated = $this->updateBatch($batch);
                 $totalUpdated += $updated;
                 $batch = [];
+
+                // Show progress every 50k rows
+                if ($rowsProcessed - $lastProgressUpdate >= 50000) {
+                    $percent = round($rowsProcessed / $totalRows * 100, 1);
+                    $this->line("    Progress: " . number_format($rowsProcessed) . "/" . number_format($totalRows) . " rows ({$percent}%) - Updated: " . number_format($totalUpdated));
+                    $lastProgressUpdate = $rowsProcessed;
+                }
             }
         }
 
@@ -267,7 +288,10 @@ class FixWardDataCommand extends Command
             return;
         }
 
+        $this->line("  Properties with ward codes: " . number_format($wardCount));
+
         // Get unique ward-LAD combinations
+        $this->line("  Finding unique ward-LAD pairs...");
         $wardLadPairs = DB::table('properties')
             ->select('wd25cd', 'lad25cd')
             ->whereNotNull('wd25cd')
@@ -275,12 +299,15 @@ class FixWardDataCommand extends Command
             ->distinct()
             ->get();
 
-        $this->info("  Found " . $wardLadPairs->count() . " unique ward-LAD pairs");
+        $this->info("  Found " . number_format($wardLadPairs->count()) . " unique ward-LAD pairs");
 
         $inserted = 0;
         $skipped = 0;
+        $processed = 0;
+        $total = $wardLadPairs->count();
 
         foreach ($wardLadPairs as $pair) {
+            $processed++;
             $wardCode = trim($pair->wd25cd);
             $ladCode = trim($pair->lad25cd);
 
@@ -292,36 +319,41 @@ class FixWardDataCommand extends Command
 
             if ($exists) {
                 $skipped++;
-                continue;
+            } else {
+                // Get names from boundary_names
+                $wardName = DB::table('boundary_names')
+                    ->where('gss_code', $wardCode)
+                    ->value('name') ?? $wardCode;
+
+                $ladName = DB::table('boundary_names')
+                    ->where('gss_code', $ladCode)
+                    ->value('name') ?? $ladCode;
+
+                DB::table('ward_hierarchy_lookups')->insert([
+                    'wd_code' => $wardCode,
+                    'wd_name' => $wardName,
+                    'lad_code' => $ladCode,
+                    'lad_name' => $ladName,
+                    'cty_code' => null,
+                    'cty_name' => null,
+                    'ced_code' => null,
+                    'ced_name' => null,
+                    'source' => 'fix_ward_data',
+                    'version_date' => now()->toDateString(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $inserted++;
             }
 
-            // Get names from boundary_names
-            $wardName = DB::table('boundary_names')
-                ->where('gss_code', $wardCode)
-                ->value('name') ?? $wardCode;
-
-            $ladName = DB::table('boundary_names')
-                ->where('gss_code', $ladCode)
-                ->value('name') ?? $ladCode;
-
-            DB::table('ward_hierarchy_lookups')->insert([
-                'wd_code' => $wardCode,
-                'wd_name' => $wardName,
-                'lad_code' => $ladCode,
-                'lad_name' => $ladName,
-                'cty_code' => null,
-                'cty_name' => null,
-                'ced_code' => null,
-                'ced_name' => null,
-                'source' => 'fix_ward_data',
-                'version_date' => now()->toDateString(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $inserted++;
+            // Show progress every 500 pairs
+            if ($processed % 500 === 0 || $processed === $total) {
+                $percent = round($processed / $total * 100, 1);
+                $this->line("  Progress: {$processed}/{$total} ({$percent}%) - Inserted: {$inserted}, Skipped: {$skipped}");
+            }
         }
 
-        $this->info("  Inserted: {$inserted}, Skipped (existing): {$skipped}");
+        $this->info("  Complete! Inserted: {$inserted}, Skipped (existing): {$skipped}");
     }
 }
