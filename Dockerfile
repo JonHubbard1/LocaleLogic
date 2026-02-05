@@ -40,7 +40,6 @@ RUN chmod -R 775 storage bootstrap/cache 2>/dev/null || true \
     && chown -R www-data:www-data /app
 
 # Configure nginx
-COPY deploy-scripts/nginx.conf /etc/nginx/sites-available/default 2>/dev/null || true
 RUN cat > /etc/nginx/sites-available/default << 'NGINX'
 server {
     listen 80;
