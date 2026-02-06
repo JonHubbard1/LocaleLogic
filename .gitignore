@@ -61,3 +61,4 @@ retry-*.php
 AGENTS.md
 OllamaClaude/
 opencode.json
+auth.json
