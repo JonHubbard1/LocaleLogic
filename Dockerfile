@@ -35,8 +35,11 @@ RUN npm run build
 # Run Laravel post-install
 RUN composer run-script post-autoload-dump 2>/dev/null || true
 
-# Set permissions
-RUN chmod -R 775 storage bootstrap/cache 2>/dev/null || true \
+# Create storage directory structure and set permissions
+RUN mkdir -p storage/framework/{cache/data,sessions,views,testing} \
+    storage/logs \
+    bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
     && chown -R www-data:www-data /app
 
 # Configure nginx
