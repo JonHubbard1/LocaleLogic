@@ -36,7 +36,11 @@ RUN npm run build
 RUN composer run-script post-autoload-dump 2>/dev/null || true
 
 # Create storage directory structure and set permissions
-RUN mkdir -p storage/framework/{cache/data,sessions,views,testing} \
+# Note: brace expansion doesn't work in /bin/sh, must use separate paths
+RUN mkdir -p storage/framework/cache/data \
+    storage/framework/sessions \
+    storage/framework/views \
+    storage/framework/testing \
     storage/logs \
     bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache \
