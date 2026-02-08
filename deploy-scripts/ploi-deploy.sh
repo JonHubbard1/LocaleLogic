@@ -50,7 +50,7 @@ echo "🔑 Configuring Flux UI Pro authentication..."
 composer config repositories.flux-pro composer https://composer.fluxui.dev --no-interaction
 
 # Set authentication credentials for Flux UI Pro
-composer config http-basic.composer.fluxui.dev jon@jonhubbard.org 7b668b2b-338d-4618-a9cb-a1eae76b2725 --no-interaction
+composer config http-basic.composer.fluxui.dev jon@jonhubbard.org cd05e90c-2b19-4b1b-a651-d7c6469f4891 --no-interaction
 
 ##############################################################################
 # 4. COMPOSER DEPENDENCIES

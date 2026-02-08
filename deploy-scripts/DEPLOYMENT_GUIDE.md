@@ -88,11 +88,7 @@ LOG_LEVEL=error
    ```
 4. Enable "Quick Deploy" if desired
 
-**Note**: The deployment script includes Flux UI Pro authentication configuration. The script will automatically set up the credentials:
-- Email: `jon@jonhubbard.org`
-- License: `7b668b2b-338d-4618-a9cb-a1eae76b2725`
-
-This happens on every deployment, ensuring Composer can access the private Flux UI Pro repository.
+**Note**: The deployment script includes Flux UI Pro authentication configuration. The credentials are configured in the deploy script and auth.json — do not commit credentials to the repository.
 
 ### 6. Initial Deployment
 

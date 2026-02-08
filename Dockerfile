@@ -18,7 +18,7 @@ COPY composer.json composer.lock ./
 
 # Configure Flux UI Pro auth and install dependencies
 ARG FLUX_USERNAME=jon@jonhubbard.org
-ARG FLUX_LICENSE=7b668b2b-338d-4618-a9cb-a1eae76b2725
+ARG FLUX_LICENSE=cd05e90c-2b19-4b1b-a651-d7c6469f4891
 RUN composer config http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE" \
     && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 
