@@ -1,0 +1,144 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: localelogic_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: https://github.com/actions/checkout@v4
+
+      - name: Setup PHP
+        uses: https://github.com/shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, mbstring, xml, ctype, json, bcmath, redis, zip
+          coverage: none
+
+      - name: Setup auth.json for Flux Pro
+        env:
+          AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+        run: echo "$AUTH_JSON" > auth.json
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare environment
+        run: |
+          cp .env.testing .env 2>/dev/null || (cp .env.example .env 2>/dev/null || true)
+          php artisan key:generate
+
+      - name: Grant PostgreSQL createdb permission
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -c "ALTER USER postgres CREATEDB;"
+
+      - name: Run migrations
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: localelogic_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan migrate --force
+
+      - name: Run tests
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: localelogic_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan test
+
+  deploy-production:
+    needs: tests
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.localelogic.uk
+
+    steps:
+      - name: Checkout code
+        uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FORGEJO_TOKEN }}
+
+      - name: Auto-version and tag
+        id: versioning
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            NEW_TAG="v1.0.0"
+          else
+            VERSION=${LATEST_TAG#v}
+            IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
+            PATCH=$((VERSION_PARTS[2] + 1))
+            NEW_TAG="v${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$PATCH"
+          fi
+
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_TAG"
+
+          git config user.name "Forgejo Actions"
+          git config user.email "actions@technoliga.co.uk"
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+          git push origin "$NEW_TAG"
+
+      - name: Trigger Ploi deployment
+        env:
+          WEBHOOK_URL: ${{ secrets.PLOI_WEBHOOK_PRODUCTION }}
+          NEW_TAG: ${{ steps.versioning.outputs.new_tag }}
+        run: |
+          echo "Deploying LocaleLogic to Production (Bordeaux)"
+          echo "Version: $NEW_TAG"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Deploy triggered successfully"
+          else
+            echo "Failed to trigger deploy (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Create Forgejo Release
+        env:
+          NEW_TAG: ${{ steps.versioning.outputs.new_tag }}
+          DEPLOY_TIME: ${{ github.event.head_commit.timestamp }}
+        run: |
+          curl -s -X POST "https://git.technoliga.co.uk/api/v1/repos/${{ github.repository }}/releases" \
+            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"tag_name\": \"$NEW_TAG\",
+              \"name\": \"Release $NEW_TAG\",
+              \"body\": \"Automated release $NEW_TAG\nDeployed to production (Bordeaux) on $DEPLOY_TIME\",
+              \"draft\": false,
+              \"prerelease\": false
+            }"
