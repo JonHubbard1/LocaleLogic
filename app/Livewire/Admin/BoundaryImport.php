@@ -40,7 +40,7 @@ class BoundaryImport extends Component
     ];
 
     /**
-     * All boundary types including those that require manual upload.
+     * All boundary types that can be imported.
      */
     public array $boundaryTypes = [
         // Auto-importable (from ArcGIS)
@@ -52,10 +52,6 @@ class BoundaryImport extends Component
         'ced' => 'County Electoral Division Boundaries',
         'constituencies' => 'Westminster Parliamentary Constituencies',
         'police_force_areas' => 'Police Force Area Boundaries',
-
-        // Manual upload only (relationship tables)
-        'ward_hierarchy_lookup' => 'Ward → LAD → County → CED Lookup',
-        'parish_lookup' => 'Parish → Ward → LAD Lookup',
 
         // Optional/Additional
         'lpa' => 'Local Planning Authority Boundaries',
@@ -77,10 +73,6 @@ class BoundaryImport extends Component
         'constituencies' => 'UK Parliament constituencies (Westminster)',
         'police_force_areas' => 'Police force areas for England and Wales',
 
-        // Essential Relationships
-        'ward_hierarchy_lookup' => 'Hierarchical relationships between Wards, LADs, Counties, and CEDs',
-        'parish_lookup' => 'Relationships between Parishes, Wards, and LADs',
-
         // Optional/Additional
         'lpa' => 'Local planning authority areas',
         'combined_authorities' => 'Groups of local authorities with devolved powers',
@@ -100,10 +92,6 @@ class BoundaryImport extends Component
         'ced' => 'https://geoportal.statistics.gov.uk/search?q=County%20Electoral%20Divisions%20May%202025%20Boundaries',
         'constituencies' => 'https://geoportal.statistics.gov.uk/search?q=Westminster%20Parliamentary%20Constituencies%20July%202024%20Boundaries',
         'police_force_areas' => 'https://geoportal.statistics.gov.uk/search?q=Police%20Force%20Areas%20December%202023%20Boundaries',
-
-        // Essential Relationships
-        'ward_hierarchy_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Ward%20to%20LAD%20to%20County%20Lookup',
-        'parish_lookup' => 'https://geoportal.statistics.gov.uk/search?q=Parish%20to%20Ward%20to%20LAD%20Lookup',
 
         // Optional/Additional
         'lpa' => 'https://geoportal.statistics.gov.uk/search?q=Local%20Planning%20Authorities%20April%202023%20Boundaries',

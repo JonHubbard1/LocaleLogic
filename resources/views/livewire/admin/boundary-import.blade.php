@@ -123,108 +123,6 @@
             </div>
         </flux:card>
 
-        {{-- Section 2: Hierarchy Lookups (Manual Upload Only) --}}
-        <flux:card>
-            <flux:heading>Hierarchy Lookups</flux:heading>
-            <flux:subheading>Relationship tables between geography levels. These require manual CSV upload from the ONS portal.</flux:subheading>
-
-            <div class="mt-4 grid gap-4 md:grid-cols-2">
-                @foreach(['ward_hierarchy_lookup', 'parish_lookup'] as $key)
-                    @php
-                        $lookupImport = $this->getImportStatus($key, 'lookups');
-                        $hasRunning = $lookupImport && in_array($lookupImport->status, ['pending', 'processing']);
-                        $lookupInfo = $this->getLatestLookupFileDate($key);
-                        $isLookupOutdated = $this->isLookupOutdated($key);
-                    @endphp
-                    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 {{ $isLookupOutdated ? 'bg-red-50 dark:bg-red-900/10' : '' }}">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $boundaryTypes[$key] }}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ $boundaryDescriptions[$key] }}</div>
-                            </div>
-                            <div class="shrink-0">
-                                @if($hasRunning)
-                                    <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                                        <div class="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></div>
-                                        <span class="text-xs text-blue-900 dark:text-blue-200 font-medium">
-                                            @if($lookupImport->status === 'pending')
-                                                Queued
-                                            @else
-                                                {{ $lookupImport->getProgressPercentage() }}%
-                                            @endif
-                                        </span>
-                                    </span>
-                                @elseif($lookupImport && $lookupImport->status === 'completed')
-                                    <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30">
-                                        <div class="h-2 w-2 rounded-full bg-green-500"></div>
-                                        <span class="text-xs text-green-900 dark:text-green-200 font-medium">{{ number_format($lookupImport->records_processed) }}</span>
-                                    </span>
-                                @elseif($lookupImport && $lookupImport->status === 'failed')
-                                    <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30">
-                                        <div class="h-2 w-2 rounded-full bg-red-500"></div>
-                                        <span class="text-xs text-red-900 dark:text-red-200 font-medium">Failed</span>
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
-                                        <div class="h-2 w-2 rounded-full bg-gray-400"></div>
-                                        <span class="text-xs text-gray-600 dark:text-gray-400 font-medium">Not imported</span>
-                                    </span>
-                                @endif
-                            </div>
-                        </div>
-
-                        {{-- Show file date and outdated warning --}}
-                        @if($lookupInfo)
-                            <div class="mt-2 flex items-center gap-2">
-                                @if($isLookupOutdated)
-                                    <flux:icon.exclamation-triangle class="h-3.5 w-3.5 text-red-500 shrink-0" />
-                                    <span class="text-xs text-red-600 dark:text-red-400 font-medium">
-                                        {{ \Carbon\Carbon::parse($lookupInfo['date'])->format('F Y') }} — newer version may be available
-                                    </span>
-                                @else
-                                    <flux:icon.check-circle class="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                    <span class="text-xs text-gray-600 dark:text-gray-400">
-                                        Current: {{ \Carbon\Carbon::parse($lookupInfo['date'])->format('F Y') }}
-                                    </span>
-                                @endif
-                            </div>
-                            <div class="text-xs text-gray-400 dark:text-gray-500 truncate" title="{{ $lookupInfo['source'] }}">
-                                {{ strlen($lookupInfo['source']) > 55 ? substr($lookupInfo['source'], 0, 52) . '...' : $lookupInfo['source'] }}
-                            </div>
-                        @endif
-
-                        <div class="mt-3">
-                            <input
-                                type="radio"
-                                wire:model.live="boundaryType"
-                                value="{{ $key }}"
-                                class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                                id="lookup_{{ $key }}"
-                            />
-                            <label for="lookup_{{ $key }}" class="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                Select to upload CSV
-                            </label>
-                        </div>
-
-                        @if($lookupImport && $lookupImport->status === 'failed')
-                            <div class="mt-2 text-xs text-red-600 dark:text-red-400">
-                                {{ $lookupImport->error_message }}
-                            </div>
-                        @endif
-
-                        @if(isset($onsPageUrls[$key]))
-                            <div class="mt-2">
-                                <a href="{{ $onsPageUrls[$key] }}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
-                                    <flux:icon.arrow-top-right-on-square class="h-3 w-3" />
-                                    Check ONS for updates
-                                </a>
-                            </div>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-        </flux:card>
-
         {{-- Flash Messages --}}
         @if(session('success'))
             <flux:card class="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
@@ -250,11 +148,7 @@
                     Import Data for {{ $boundaryTypes[$boundaryType] ?? 'Unknown' }}
                 </flux:heading>
                 <flux:subheading>
-                    @if($this->supportsAutoImport($boundaryType))
-                        Upload file or download from URL for out-of-cycle updates
-                    @else
-                        Upload CSV file for relationship lookups
-                    @endif
+                    Upload file or download from URL for out-of-cycle updates
                 </flux:subheading>
 
                 {{-- File Upload Form: Standard Laravel POST (bypasses Livewire file upload issues) --}}
