@@ -6,6 +6,7 @@ use App\Livewire\Admin\ApiTokenManager;
 use App\Livewire\Admin\BoundaryImport;
 use App\Livewire\Admin\CleanupManager;
 use App\Livewire\Admin\DataVersionTable;
+use App\Livewire\Admin\GeographyVersionTable;
 use App\Livewire\Admin\ImportManager;
 use App\Livewire\Admin\ImportProgress;
 use App\Livewire\Admin\TableViewer;
@@ -46,6 +47,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/boundaries', BoundaryImport::class)->name('boundaries');
         Route::post('/boundaries/upload', [BoundaryImportController::class, 'upload'])->name('boundaries.upload');
         Route::get('/versions', DataVersionTable::class)->name('versions');
+        Route::get('/geography-versions', GeographyVersionTable::class)->name('geography-versions');
         Route::get('/cleanup', CleanupManager::class)->name('cleanup');
         Route::get('/users', UserManager::class)->name('users');
         Route::get('/api-tokens', ApiTokenManager::class)->name('api-tokens');
