@@ -27,7 +27,13 @@ return new class extends Migration
             DB::statement("ALTER TABLE boundary_geometries ADD COLUMN geom geometry(Geometry, 4326)");
         }
 
-        DB::statement("CREATE INDEX IF NOT EXISTS boundary_geometries_geom_idx ON boundary_geometries USING GIST (geom)");
+        $indexExists = DB::selectOne(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'boundary_geometries_geom_idx'"
+        );
+
+        if (! $indexExists) {
+            DB::statement("CREATE INDEX boundary_geometries_geom_idx ON boundary_geometries USING GIST (geom)");
+        }
 
         DB::statement("
             UPDATE boundary_geometries
