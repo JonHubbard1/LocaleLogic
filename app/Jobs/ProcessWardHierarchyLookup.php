@@ -78,6 +78,14 @@ class ProcessWardHierarchyLookup implements ShouldQueue
             $header[0] = preg_replace('/^\x{FEFF}/u', '', $header[0]);
         }
 
+        // Discover field names dynamically (ONS changes year codes: WD25CD, WD24CD, etc.)
+        $fields = $this->discoverFields($header);
+        if (! $fields['wd_code']) {
+            throw new \RuntimeException('Could not discover required ward fields from CSV header: ' . implode(', ', $header));
+        }
+
+        Log::info('Discovered ward hierarchy fields from CSV', ['fields' => $fields]);
+
         // Count total rows
         $totalRows = 0;
         while (fgetcsv($handle) !== false) {
@@ -89,22 +97,28 @@ class ProcessWardHierarchyLookup implements ShouldQueue
         $import->update(['records_total' => $totalRows]);
 
         $batch = [];
-        $batchSize = 100; // Reduced from 500 to avoid PostgreSQL parameter limit with upsert
+        $batchSize = 100;
         $processed = 0;
 
         while (($row = fgetcsv($handle)) !== false) {
             try {
                 $data = array_combine($header, $row);
 
+                $wdCode = $data[$fields['wd_code']] ?? null;
+                if (! $wdCode) {
+                    $import->incrementFailed();
+                    continue;
+                }
+
                 $batch[] = [
-                    'wd_code' => $data['WD25CD'] ?? null,
-                    'wd_name' => $data['WD25NM'] ?? null,
-                    'lad_code' => $data['LAD25CD'] ?? null,
-                    'lad_name' => $data['LAD25NM'] ?? null,
-                    'cty_code' => !empty($data['CTY25CD']) ? $data['CTY25CD'] : null,
-                    'cty_name' => !empty($data['CTY25NM']) ? $data['CTY25NM'] : null,
-                    'ced_code' => !empty($data['CED25CD']) ? $data['CED25CD'] : null,
-                    'ced_name' => !empty($data['CED25NM']) ? $data['CED25NM'] : null,
+                    'wd_code' => $wdCode,
+                    'wd_name' => $data[$fields['wd_name']] ?? null,
+                    'lad_code' => $data[$fields['lad_code']] ?? null,
+                    'lad_name' => $data[$fields['lad_name']] ?? null,
+                    'cty_code' => !empty($data[$fields['cty_code']]) ? $data[$fields['cty_code']] : null,
+                    'cty_name' => !empty($data[$fields['cty_name']]) ? $data[$fields['cty_name']] : null,
+                    'ced_code' => !empty($data[$fields['ced_code']]) ? $data[$fields['ced_code']] : null,
+                    'ced_name' => !empty($data[$fields['ced_name']]) ? $data[$fields['ced_name']] : null,
                     'version_date' => now()->toDateString(),
                     'source' => 'ons_lookup',
                     'created_at' => now(),
@@ -138,13 +152,53 @@ class ProcessWardHierarchyLookup implements ShouldQueue
         fclose($handle);
     }
 
+    /**
+     * Discover field names dynamically from CSV header.
+     * ONS changes year codes (WD25CD, WD24CD, etc.) so we match by pattern.
+     */
+    private function discoverFields(array $header): array
+    {
+        $result = [
+            'wd_code' => null, 'wd_name' => null,
+            'lad_code' => null, 'lad_name' => null,
+            'cty_code' => null, 'cty_name' => null,
+            'ced_code' => null, 'ced_name' => null,
+        ];
+
+        $patterns = [
+            'wd_code' => '/^WD\d{2}CD$/i',
+            'wd_name' => '/^WD\d{2}NM$/i',
+            'lad_code' => '/^LAD\d{2}CD$/i',
+            'lad_name' => '/^LAD\d{2}NM$/i',
+            'cty_code' => '/^CTY\d{2}CD$/i',
+            'cty_name' => '/^CTY\d{2}NM$/i',
+            'ced_code' => '/^CED\d{2}CD$/i',
+            'ced_name' => '/^CED\d{2}NM$/i',
+        ];
+
+        foreach ($header as $fieldName) {
+            foreach ($patterns as $key => $pattern) {
+                if (! $result[$key] && preg_match($pattern, $fieldName)) {
+                    $result[$key] = $fieldName;
+                }
+            }
+        }
+
+        return $result;
+    }
+
     private function insertBatch(array $batch): void
     {
+        // Filter out rows with null wd_code before upsert
+        $batch = array_filter($batch, fn (array $row) => ! empty($row['wd_code']));
+
+        if (empty($batch)) {
+            return;
+        }
+
         // Deduplicate batch based on unique constraint (wd_code + ced_code + version_date)
-        // ONS CSV files contain duplicate rows that need to be filtered out
         $uniqueRows = [];
         foreach ($batch as $row) {
-            // Handle NULL values explicitly - convert to empty string for key consistency
             $cedCode = $row['ced_code'] ?? '';
             $wdCode = $row['wd_code'] ?? '';
             $versionDate = $row['version_date'] ?? '';

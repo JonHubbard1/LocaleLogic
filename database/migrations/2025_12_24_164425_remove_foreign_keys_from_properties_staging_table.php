@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -18,16 +19,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('properties_staging', function (Blueprint $table) {
-            // Drop all foreign key constraints
-            $table->dropForeign(['wd25cd']);
-            $table->dropForeign(['ced25cd']);
-            $table->dropForeign(['parncp25cd']);
-            $table->dropForeign(['lad25cd']);
-            $table->dropForeign(['pcon24cd']);
-            $table->dropForeign(['rgn25cd']);
-            $table->dropForeign(['pfa23cd']);
-        });
+        $constraints = [
+            'properties_staging_wd25cd_foreign',
+            'properties_staging_ced25cd_foreign',
+            'properties_staging_parncp25cd_foreign',
+            'properties_staging_lad25cd_foreign',
+            'properties_staging_pcon24cd_foreign',
+            'properties_staging_rgn25cd_foreign',
+            'properties_staging_pfa23cd_foreign',
+        ];
+
+        foreach ($constraints as $constraint) {
+            DB::statement("ALTER TABLE properties_staging DROP CONSTRAINT IF EXISTS {$constraint}");
+        }
     }
 
     /**

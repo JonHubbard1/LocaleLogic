@@ -41,6 +41,8 @@ class DataVersion extends Model
         'files',
         'log_file',
         'stats',
+        'steps',
+        'current_step',
     ];
 
     /**
@@ -56,6 +58,7 @@ class DataVersion extends Model
             'progress_percentage' => 'decimal:2',
             'files' => 'array',
             'stats' => 'array',
+            'steps' => 'array',
         ];
     }
 }

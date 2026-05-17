@@ -2,11 +2,13 @@
 
 namespace App\Livewire\Admin;
 
+use App\Jobs\AutoImportBoundary;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -16,14 +18,32 @@ class BoundaryImport extends Component
 {
     use WithFileUploads;
 
-    public $boundaryType = '';
+    #[Url]
+    public string $boundaryType = '';
     public $file;
     public $downloadUrl = '';
     public $importing = false;
     public $useUrl = 0; // Use 0/1 to match radio button values
 
+    /**
+     * Boundary types that support automatic ArcGIS discovery and import.
+     */
+    public array $autoBoundaryTypes = [
+        'region' => 'Region Boundaries',
+        'counties' => 'Counties and Unitary Authorities',
+        'lad' => 'Local Authority District Boundaries',
+        'wards' => 'Electoral Ward Boundaries',
+        'parishes' => 'Parish Boundaries',
+        'ced' => 'County Electoral Division Boundaries',
+        'constituencies' => 'Westminster Parliamentary Constituencies',
+        'police_force_areas' => 'Police Force Area Boundaries',
+    ];
+
+    /**
+     * All boundary types including those that require manual upload.
+     */
     public array $boundaryTypes = [
-        // Core Geography - Upload in this order (parent → child)
+        // Auto-importable (from ArcGIS)
         'region' => 'Region Boundaries',
         'counties' => 'Counties and Unitary Authorities',
         'lad' => 'Local Authority District Boundaries',
@@ -33,11 +53,11 @@ class BoundaryImport extends Component
         'constituencies' => 'Westminster Parliamentary Constituencies',
         'police_force_areas' => 'Police Force Area Boundaries',
 
-        // Essential Relationships - Upload after core geography
+        // Manual upload only (relationship tables)
         'ward_hierarchy_lookup' => 'Ward → LAD → County → CED Lookup',
         'parish_lookup' => 'Parish → Ward → LAD Lookup',
 
-        // Optional/Additional Boundaries
+        // Optional/Additional
         'lpa' => 'Local Planning Authority Boundaries',
         'combined_authorities' => 'Combined Authorities',
         'scottish_constituencies' => 'Scottish Parliament Constituencies',
@@ -174,10 +194,140 @@ class BoundaryImport extends Component
     }
 
     /**
+     * Get the latest lookup file date for manual-upload-only types.
+     * Returns array with 'date' (YYYY-MM-01), 'source' (filename or upload date), and 'status'.
+     */
+    public function getLatestLookupFileDate(string $boundaryType): ?array
+    {
+        $import = \App\Models\BoundaryImport::where('boundary_type', $boundaryType)
+            ->where('data_type', 'lookups')
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (! $import) {
+            return null;
+        }
+
+        $originalFilename = $import->metadata['original_filename'] ?? null;
+
+        if ($originalFilename) {
+            $date = $this->extractOnsDateFromFilename($originalFilename);
+            if ($date) {
+                return [
+                    'date' => $date,
+                    'source' => $originalFilename,
+                    'status' => $import->status,
+                ];
+            }
+        }
+
+        return [
+            'date' => $import->created_at->format('Y-m-d'),
+            'source' => 'Uploaded ' . $import->created_at->format('d M Y'),
+            'status' => $import->status,
+        ];
+    }
+
+    /**
+     * Extract an ONS release date (YYYY-MM-01) from a filename.
+     * Handles patterns like _(May_2025)_ or _May_2025_ in filenames.
+     */
+    private function extractOnsDateFromFilename(string $filename): ?string
+    {
+        if (preg_match('/_\(([A-Za-z]+)_(\d{4})\)_/', $filename, $matches)) {
+            $monthNum = $this->monthNameToNumber($matches[1]);
+            if ($monthNum) {
+                return "{$matches[2]}-{$monthNum}-01";
+            }
+        }
+
+        if (preg_match('/_([A-Za-z]+)_(\d{4})_/', $filename, $matches)) {
+            $monthNum = $this->monthNameToNumber($matches[1]);
+            if ($monthNum) {
+                return "{$matches[2]}-{$monthNum}-01";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert a full month name to a two-digit number.
+     */
+    private function monthNameToNumber(string $month): ?string
+    {
+        $map = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12',
+        ];
+
+        return $map[ucfirst(strtolower($month))] ?? null;
+    }
+
+    /**
+     * Convert a month abbreviation to a two-digit number.
+     */
+    private function monthAbbreviationToNumber(string $month): ?string
+    {
+        $map = [
+            'JAN' => '01', 'FEB' => '02', 'MAR' => '03', 'APR' => '04',
+            'MAY' => '05', 'JUN' => '06', 'JUL' => '07', 'AUG' => '08',
+            'SEP' => '09', 'OCT' => '10', 'NOV' => '11', 'DEC' => '12',
+        ];
+
+        return $map[strtoupper($month)] ?? null;
+    }
+
+    /**
+     * Check if a manual lookup file may be outdated based on ONS release schedule.
+     */
+    public function isLookupOutdated(string $boundaryType): bool
+    {
+        $schedule = [
+            'ward_hierarchy_lookup' => ['month' => 'May'],
+            'parish_lookup' => ['month' => 'April'],
+        ];
+
+        if (! isset($schedule[$boundaryType])) {
+            return false;
+        }
+
+        $fileInfo = $this->getLatestLookupFileDate($boundaryType);
+        if (! $fileInfo || ! $fileInfo['date']) {
+            return false;
+        }
+
+        $expectedMonthNum = (int) $this->monthNameToNumber($schedule[$boundaryType]['month']);
+        if (! $expectedMonthNum) {
+            return false;
+        }
+
+        $currentYear = now()->year;
+        $currentMonth = now()->month;
+        $expectedYear = ($currentMonth >= $expectedMonthNum) ? $currentYear : $currentYear - 1;
+        $expectedVersion = sprintf('%d-%02d-01', $expectedYear, $expectedMonthNum);
+
+        try {
+            return new \DateTime($expectedVersion) > new \DateTime($fileInfo['date']);
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
      * Check if a boundary type is outdated based on ONS update schedule
      */
     public function isOutdated($boundaryType): bool
     {
+        // TODO: Tidy up outdated logic for boundary types where ONS publishes
+        //       names/codes tables before boundary polygons (e.g. PFA Dec 2025).
+        //       Currently police_force_areas shows as outdated because the schedule
+        //       expects Dec 2025, but only a names-only FeatureServer exists; the
+        //       latest polygon boundary is Dec 2024. Need to:
+        //       1. Distinguish between "no newer polygon available" vs "not checked"
+        //       2. Auto-update records when a genuine newer polygon release appears
+        //       3. Consider using the ArcGIS item release date rather than a hardcoded schedule.
         // Update schedule for each boundary type (from CheckForBoundaryUpdates command)
         $updateSchedule = [
             'wards' => ['month' => 'December', 'frequency' => 'annual'],
@@ -432,8 +582,14 @@ class BoundaryImport extends Component
                     'source' => 'url_download',
                 ]);
 
+                $metadata = [];
+                $urlFilename = basename(parse_url($this->downloadUrl, PHP_URL_PATH) ?? '');
+                if ($urlFilename) {
+                    $metadata['original_filename'] = urldecode($urlFilename);
+                }
+
                 try {
-                    \App\Jobs\ProcessBoundaryImport::dispatch($path, $this->boundaryType, 'url_download');
+                    \App\Jobs\ProcessBoundaryImport::dispatch($path, $this->boundaryType, 'url_download', $metadata);
                     Log::info('ProcessBoundaryImport job dispatched successfully');
                 } catch (\Throwable $dispatchError) {
                     Log::error('Failed to dispatch ProcessBoundaryImport job', [
@@ -529,6 +685,101 @@ class BoundaryImport extends Component
             ]);
             $this->dispatch('import-error', message: 'Failed to queue import: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Trigger automatic import of a boundary type from ArcGIS.
+     */
+    public function autoImport(string $boundaryType): void
+    {
+        if (! isset($this->autoBoundaryTypes[$boundaryType])) {
+            $this->dispatch('import-error', message: 'Boundary type does not support automatic import');
+
+            return;
+        }
+
+        // Check if an import is already running for this type
+        $existingImport = \App\Models\BoundaryImport::where('boundary_type', $boundaryType)
+            ->whereIn('status', ['pending', 'processing'])
+            ->where('data_type', 'polygons')
+            ->first();
+
+        if ($existingImport) {
+            $this->dispatch('import-error', message: 'An import is already running for ' . $this->boundaryTypes[$boundaryType]);
+
+            return;
+        }
+
+        try {
+            AutoImportBoundary::dispatch($boundaryType, 'manual_auto');
+
+            Log::info('Queued auto boundary import', [
+                'boundary_type' => $boundaryType,
+                'triggered_by' => auth()->user()?->name ?? 'System',
+            ]);
+
+            $this->dispatch('import-success', message: 'Auto-import queued for ' . $this->boundaryTypes[$boundaryType] . '. Download will begin shortly.');
+        } catch (\Exception $e) {
+            Log::error('Failed to queue auto boundary import', [
+                'boundary_type' => $boundaryType,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->dispatch('import-error', message: 'Failed to queue import: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Trigger automatic import for all auto-importable boundaries.
+     */
+    public function autoImportAll(): void
+    {
+        $queued = 0;
+
+        foreach (array_keys($this->autoBoundaryTypes) as $boundaryType) {
+            $existingImport = \App\Models\BoundaryImport::where('boundary_type', $boundaryType)
+                ->whereIn('status', ['pending', 'processing'])
+                ->where('data_type', 'polygons')
+                ->first();
+
+            if ($existingImport) {
+                continue;
+            }
+
+            try {
+                AutoImportBoundary::dispatch($boundaryType, 'manual_auto_all');
+                $queued++;
+            } catch (\Exception $e) {
+                Log::warning('Failed to queue auto import for boundary type', [
+                    'boundary_type' => $boundaryType,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($queued > 0) {
+            $this->dispatch('import-success', message: "Queued auto-import for {$queued} boundary type(s).");
+        } else {
+            $this->dispatch('import-error', message: 'All boundary types are already importing or have no updates available.');
+        }
+    }
+
+    /**
+     * Check if a specific boundary type supports automatic import.
+     */
+    public function supportsAutoImport(string $boundaryType): bool
+    {
+        return isset($this->autoBoundaryTypes[$boundaryType]);
+    }
+
+    public function updatedFile(\Livewire\Features\SupportFileUploads\TemporaryUploadedFile|\Illuminate\Http\UploadedFile|null $value): void
+    {
+        Log::info('BoundaryImport file property updated', [
+            'has_file' => ! is_null($value),
+            'file_class' => $value ? get_class($value) : null,
+            'file_name' => $value ? $value->getClientOriginalName() : null,
+            'file_size' => $value ? $value->getSize() : null,
+        ]);
     }
 
     public function render()

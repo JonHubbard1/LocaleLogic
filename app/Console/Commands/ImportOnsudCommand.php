@@ -25,7 +25,13 @@ class ImportOnsudCommand extends Command
         {--skip-indexes : Skip index creation after table swap}
         {--skip-swap : Import to staging only without swapping}
         {--force : Force import even if validation fails}
-        {--cleanup-old : Drop old table immediately after successful swap}';
+        {--cleanup-old : Drop old table immediately after successful swap}
+        {--auto-discover : Automatically discover and download the latest ONSUD release from ArcGIS}
+        {--skip-if-current : Skip import if discovered epoch matches current DataVersion}
+        {--postcode-filter= : Import only records where postcode starts with this prefix (dev mode, e.g. SN15)}
+        {--lad-filter= : Import only records matching this LAD code (e.g. E06000054 for Wiltshire)}
+        {--limit=0 : Maximum records to import (0 = no limit)}
+        {--data-version-id= : Pre-created DataVersion ID to update (dashboard pre-creates record)}';
 
     protected $description = 'Import ONS UPRN Directory (ONSUD) data into properties table';
 
@@ -39,9 +45,16 @@ class ImportOnsudCommand extends Command
         'errors' => 0,
         'coordinate_errors' => 0,
         'missing_required_fields' => 0,
+        'filtered_by_postcode' => 0,
     ];
 
     private ?DataVersion $dataVersion = null;
+
+    private ?array $discoveredRelease = null;
+
+    private array $columnMap = [];
+
+    private array $cleanupPaths = [];
 
     public function __construct(CoordinateConverter $coordinateConverter, TableSwapService $tableSwapService)
     {
@@ -56,15 +69,55 @@ class ImportOnsudCommand extends Command
             // 1. Validate input options
             $epoch = $this->option('epoch');
             $releaseDate = $this->option('release-date');
+            $autoDiscover = $this->option('auto-discover');
 
-            if (!$epoch || !$releaseDate) {
-                $this->error("Both --epoch and --release-date are required");
-                $this->info("Example: php artisan onsud:import --file=/path/to/onsud.zip --epoch=114 --release-date=2024-11-01");
+            // If pre-created DataVersion exists, load it early so download/extract steps can update it
+            $dataVersionId = $this->option('data-version-id');
+            if ($dataVersionId) {
+                $this->dataVersion = DataVersion::find($dataVersionId);
+            }
+
+            if ($autoDiscover) {
+                $release = $this->discoverLatestOnsudRelease();
+                if (! $release) {
+                    $this->error('Could not discover latest ONSUD release from ArcGIS');
+
+                    return 1;
+                }
+
+                $epoch = (string) $release['epoch'];
+                $releaseDate = $release['release_date'];
+                $this->discoveredRelease = $release;
+
+                $this->info("Discovered ONSUD Epoch {$epoch} ({$releaseDate}) — {$release['title']}");
+
+                // Mark discover step as completed
+                $this->updateStep('discover', 'completed', 100, "Epoch {$epoch} discovered");
+
+                if ($this->option('skip-if-current')) {
+                    $current = DataVersion::where('dataset', 'ONSUD')
+                        ->where('status', 'current')
+                        ->first();
+                    if ($current && (int) $current->epoch === (int) $epoch) {
+                        $this->info("Epoch {$epoch} is already current. Skipping import.");
+
+                        return 0;
+                    }
+                }
+            } elseif (! $epoch || ! $releaseDate) {
+                $this->error('Both --epoch and --release-date are required (or use --auto-discover)');
+                $this->info('Example: php artisan onsud:import --auto-discover');
+                $this->info('Example: php artisan onsud:import --file=/path/to/onsud.zip --epoch=123 --release-date=2025-12-01');
+
                 return 1;
             }
 
-            // 2. Determine CSV file path(s)
-            $csvPaths = $this->resolveCsvPath($epoch);
+            // 2. Apply automatic dev-mode filter for non-production environments
+            // (Disabled: importing full dataset for testing)
+            // $this->applyDevModeFilter();
+
+            // 3. Determine CSV file path(s)
+            $csvPaths = $this->resolveCsvPath((string) $epoch);
 
             if (!$csvPaths) {
                 $this->error("CSV file not found");
@@ -73,6 +126,7 @@ class ImportOnsudCommand extends Command
 
             // Handle both single file and multiple files
             $csvFiles = is_array($csvPaths) ? $csvPaths : [$csvPaths];
+            $this->cleanupPaths = $csvFiles;
 
             // Validate all files exist
             foreach ($csvFiles as $csvPath) {
@@ -118,27 +172,128 @@ class ImportOnsudCommand extends Command
                 $this->updateFileStatus($index, 'completed');
             }
 
-            // 6. Display and save statistics
+            // Mark import step as completed
+            $this->updateStep('import', 'completed', 100, "Imported " . number_format($this->stats['successful']) . " records");
+
+            // 6. Import geography lookup files from Documents folder
+            $extractPath = count($csvFiles) > 0 ? dirname($csvFiles[0]) : null;
+            if ($extractPath && basename($extractPath) === 'Data') {
+                $extractPath = dirname($extractPath);
+            }
+            if ($extractPath && File::isDirectory($extractPath . '/Documents')) {
+                $this->importLookupFiles($extractPath, (int) $epoch, $releaseDate);
+            }
+
+            // 7. Reconcile geography codes on staging table using spatial containment
+            $this->reconcileGeographyCodes();
+
+            // 8. Display and save statistics
             $this->displayStatistics();
             $this->updateStats();
 
-            // 7. Perform table swap
+            // 9. Validate staging table
+            $this->updateStep('validate', 'active', 0, 'Validating staging table...');
+            $this->info("Validating staging table before swap...");
+            $validation = $this->tableSwapService->validateStagingTable($this->stats['successful']);
+            if (! $validation['valid']) {
+                throw new \RuntimeException($validation['message']);
+            }
+            $this->updateStep('validate', 'completed', 100, "Validation passed: " . number_format($validation['record_count']) . " records");
+
+            // 8. Perform table swap
+            $this->updateStep('swap', 'active', 0, 'Swapping production table...');
             $this->performTableSwap($this->stats['successful']);
+            $this->updateStep('swap', 'completed', 100, 'Table swap successful');
 
-            // 8. Create indexes
+            // 9. Create indexes
+            $this->updateStep('index', 'active', 0, 'Creating indexes...');
             $this->createIndexes();
+            $this->updateStep('index', 'completed', 100, 'Indexes created');
 
-            // 9. Update data version to current
+            // 10. Update data version to current
             $this->updateDataVersionStatus('current', 'Import completed successfully');
 
             $this->info("ONSUD import completed successfully!");
             Log::info('ONSUD Import Complete', ['stats' => $this->stats]);
 
+            // Clean up extracted CSV files to save disk space
+            $this->cleanupExtractedFiles();
+
             return 0;
 
         } catch (\Throwable $e) {
+            // Mark current step as failed
+            if ($this->dataVersion) {
+                $currentStep = $this->dataVersion->current_step ?? 'import';
+                $this->updateStep($currentStep, 'failed', null, $e->getMessage());
+            }
             $this->handleImportFailure($e);
             return 1;
+        }
+    }
+
+    /**
+     * Automatically apply data-limiting filters when running in non-production environments.
+     * Prevents accidental full 41M-record imports on dev/staging servers.
+     */
+    private function applyDevModeFilter(): void
+    {
+        $env = config('app.env');
+        $isProduction = in_array($env, ['production', 'prod'], true);
+
+        if ($isProduction) {
+            return;
+        }
+
+        $hasExplicitFilter = $this->option('postcode-filter') || $this->option('lad-filter');
+        $hasExplicitLimit = (int) $this->option('limit') > 0;
+
+        if (! $hasExplicitFilter && ! $hasExplicitLimit) {
+            $defaultPostcode = config('onsud.dev_postcode_filter');
+            $defaultLimit = config('onsud.dev_record_limit');
+            $defaultLad = config('onsud.dev_lad_filter');
+
+            $this->warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->warn("  DEV MODE DETECTED (APP_ENV={$env})");
+            $this->warn('  Automatically limiting import:');
+            if ($defaultLad) {
+                $this->warn("    LAD filter: {$defaultLad}");
+            } elseif ($defaultPostcode) {
+                $this->warn("    Postcode filter: {$defaultPostcode}");
+            }
+            $this->warn("    Record limit: {$defaultLimit}");
+            $this->warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->newLine();
+
+            // Set the input options directly so downstream code sees them
+            if ($defaultLad) {
+                $this->input->setOption('lad-filter', $defaultLad);
+            } elseif ($defaultPostcode) {
+                $this->input->setOption('postcode-filter', $defaultPostcode);
+            }
+            $this->input->setOption('limit', (string) $defaultLimit);
+
+            Log::info('Auto-applied dev-mode ONSUD filter', [
+                'env' => $env,
+                'postcode_filter' => $defaultPostcode,
+                'lad_filter' => $defaultLad,
+                'record_limit' => $defaultLimit,
+            ]);
+        } else {
+            $this->warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->warn("  DEV MODE DETECTED (APP_ENV={$env})");
+            $this->warn('  Custom filter/limit already set — using your values:');
+            if ($this->option('postcode-filter')) {
+                $this->warn('    Postcode filter: ' . $this->option('postcode-filter'));
+            }
+            if ($this->option('lad-filter')) {
+                $this->warn('    LAD filter: ' . $this->option('lad-filter'));
+            }
+            if ($hasExplicitLimit) {
+                $this->warn('    Record limit: ' . $this->option('limit'));
+            }
+            $this->warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->newLine();
         }
     }
 
@@ -195,7 +350,8 @@ class ImportOnsudCommand extends Command
             $downloadedFile = $this->downloadOnsudFile($epoch);
 
             if ($downloadedFile) {
-                return $downloadedFile;
+                $extractPath = $this->extractZip($downloadedFile);
+                return $this->findOnsudCsv($extractPath);
             }
 
             // If automatic download fails, show manual download instructions
@@ -256,11 +412,12 @@ class ImportOnsudCommand extends Command
         $zip = new ZipArchive();
         $extractPath = dirname($zipPath) . '/extracted';
 
-        if (!File::exists($extractPath)) {
+        if (! File::exists($extractPath)) {
             File::makeDirectory($extractPath, 0755, true);
         }
 
         $this->info("Extracting ZIP file...");
+        $this->updateStep('extract', 'active', 0, 'Extracting ZIP archive...');
         if ($this->dataVersion) {
             $this->updateProgress(2, "Extracting ZIP file: " . basename($zipPath));
         }
@@ -269,8 +426,15 @@ class ImportOnsudCommand extends Command
             $zip->extractTo($extractPath);
             $zip->close();
             $this->info("Extraction complete");
+            $this->updateStep('extract', 'completed', 100, 'Extraction complete');
             if ($this->dataVersion) {
                 $this->updateProgress(5, "Extraction complete, preparing to process CSV files");
+            }
+
+            // Delete ZIP after extraction to save disk space
+            if (File::exists($zipPath)) {
+                File::delete($zipPath);
+                $this->info("Removed ZIP archive to free disk space");
             }
         } else {
             throw new \RuntimeException("Failed to open ZIP file: {$zipPath}");
@@ -314,29 +478,65 @@ class ImportOnsudCommand extends Command
         return $csvFiles;
     }
 
-    private function validateCsvHeader(array $header): void
+    private function discoverColumns(array $header): void
     {
-        $requiredColumns = ['UPRN', 'PCDS', 'GRIDGB1E', 'GRIDGB1N', 'LAD25CD'];
+        $patterns = [
+            'UPRN' => '/^UPRN$/i',
+            'PCDS' => '/^PCDS$/i',
+            'GRIDGB1E' => '/^GRIDGB1E$/i',
+            'GRIDGB1N' => '/^GRIDGB1N$/i',
+            'LAD' => '/^LAD\d{2}CD$/i',
+            'WD' => '/^WD\d{2}CD$/i',
+            'CED' => '/^CED\d{2}CD$/i',
+            'PARNCP' => '/^PARNCP\d{2}CD$/i',
+            'PCON' => '/^PCON\d{2}CD$/i',
+            'LSOA' => '/^LSOA\d{2}CD$/i',
+            'MSOA' => '/^MSOA\d{2}CD$/i',
+            'RGN' => '/^RGN\d{2}CD$/i',
+            'RUC' => '/^RUC\d{2}IND$/i',
+            'PFA' => '/^PFA\d{2}CD$/i',
+        ];
 
-        $missing = array_diff($requiredColumns, $header);
+        $this->columnMap = [];
+        foreach ($header as $fieldName) {
+            foreach ($patterns as $key => $pattern) {
+                if (! isset($this->columnMap[$key]) && preg_match($pattern, $fieldName)) {
+                    $this->columnMap[$key] = $fieldName;
+                }
+            }
+        }
 
-        if (!empty($missing)) {
+        $required = ['UPRN', 'PCDS', 'GRIDGB1E', 'GRIDGB1N', 'LAD'];
+        $missing = array_filter($required, fn (string $key) => ! isset($this->columnMap[$key]));
+
+        if (! empty($missing)) {
             throw new \RuntimeException(
-                "CSV header missing required columns: " . implode(', ', $missing)
+                'CSV header missing required columns. Found: ' . implode(', ', $this->columnMap) .
+                ' | Missing patterns: ' . implode(', ', $missing)
             );
         }
 
-        $this->info("CSV header validation passed");
-        $this->line("Columns: " . implode(', ', array_slice($header, 0, 15)) . '...');
+        Log::info('Discovered ONSUD columns from header', $this->columnMap);
+        $this->info('CSV header validation passed');
+        $this->line('Columns: ' . implode(', ', array_slice($header, 0, 15)) . '...');
+    }
+
+    private function col(array $data, string $key): ?string
+    {
+        $field = $this->columnMap[$key] ?? null;
+
+        return $field ? ($data[$field] ?? null) : null;
     }
 
     private function validateRequiredFields(array $data): bool
     {
-        $requiredFields = ['UPRN', 'PCDS', 'GRIDGB1E', 'GRIDGB1N', 'LAD25CD'];
+        $required = ['UPRN', 'PCDS', 'GRIDGB1E', 'GRIDGB1N', 'LAD'];
 
-        foreach ($requiredFields as $field) {
-            if (!isset($data[$field]) || trim($data[$field]) === '') {
+        foreach ($required as $key) {
+            $value = $this->col($data, $key);
+            if (empty($value)) {
                 $this->stats['missing_required_fields']++;
+
                 return false;
             }
         }
@@ -353,23 +553,44 @@ class ImportOnsudCommand extends Command
     private function importCsvToStaging(string $csvPath, int $currentFile = 1, int $totalFiles = 1): void
     {
         $file = fopen($csvPath, 'r');
-        if (!$file) {
+        if (! $file) {
             throw new \RuntimeException("Failed to open CSV file: {$csvPath}");
         }
 
         $header = fgetcsv($file);
-        $this->validateCsvHeader($header);
+        $this->discoverColumns($header);
 
-        // Count total rows
+        $postcodeFilter = $this->option('postcode-filter');
+        $limit = (int) $this->option('limit');
+
+        // Count total rows (respecting filter if applied)
         $totalRows = 0;
-        while (fgetcsv($file) !== false) {
+        while (($row = fgetcsv($file)) !== false) {
+            if ($postcodeFilter) {
+                $data = array_combine($header, $row);
+                $postcode = strtoupper($data[$this->columnMap['PCDS']] ?? '');
+                if (! str_starts_with($postcode, strtoupper($postcodeFilter))) {
+                    continue;
+                }
+            }
             $totalRows++;
         }
         rewind($file);
         fgetcsv($file);
 
-        $this->info("Processing {$totalRows} rows...");
+        $this->info("Processing {$totalRows} rows" . ($postcodeFilter ? " (filtered by postcode: {$postcodeFilter})" : '') . '...');
         $this->stats['total_rows'] += $totalRows;
+
+        // Store total row count on the file record for progress tracking
+        $files = $this->dataVersion->files ?? [];
+        if (isset($files[$currentFile - 1])) {
+            $files[$currentFile - 1]['total'] = $totalRows;
+            $this->dataVersion->update(['files' => $files]);
+        }
+
+        // Immediately update UI so the user knows scanning finished and import started
+        $fileName = basename($csvPath);
+        $this->updateStep('import', 'active', 0, "Scan complete — {$fileName}: {$totalRows} matching rows");
 
         $batchSize = (int) $this->option('batch-size');
         $batch = [];
@@ -398,23 +619,34 @@ class ImportOnsudCommand extends Command
                 $processedInFile++;
                 $progressBar->advance();
 
-                // Update progress every 5% or every 50,000 records
-                $fileProgress = ($processedInFile / $totalRows) * 100;
-                if ($fileProgress - $lastProgressUpdate >= 5 || $processedInFile % 50000 === 0) {
-                    $overallProgress = (($currentFile - 1) / $totalFiles * 100) + ($fileProgress / $totalFiles);
-                    $fileName = basename($csvPath);
-                    $message = $totalFiles > 1
-                        ? "Processing file {$currentFile}/{$totalFiles}: {$fileName} ({$processedInFile}/{$totalRows} records)"
-                        : "Processing {$fileName} ({$processedInFile}/{$totalRows} records)";
+                // Stop if limit reached
+                if ($limit > 0 && $this->stats['successful'] >= $limit) {
+                    $this->info("\nReached limit of {$limit} records. Stopping.");
+                    break;
+                }
 
-                    $this->updateProgress($overallProgress, $message, $this->stats['successful']);
-                    $this->updateFileStatus($currentFile - 1, 'processing', $processedInFile);
-                    $this->updateStats();
-                    $lastProgressUpdate = $fileProgress;
+                // Update progress frequently: every 1% for small files (< 100k rows),
+                // every 5% or 50k rows for large files
+                if ($totalRows > 0) {
+                    $fileProgress = ($processedInFile / $totalRows) * 100;
+                    $threshold = $totalRows < 100_000 ? 1 : 5;
+                    $rowInterval = $totalRows < 100_000 ? 1_000 : 50_000;
+
+                    if ($fileProgress - $lastProgressUpdate >= $threshold || $processedInFile % $rowInterval === 0) {
+                        $overallProgress = (($currentFile - 1) / $totalFiles * 100) + ($fileProgress / $totalFiles);
+                        $message = $totalFiles > 1
+                            ? "Processing file {$currentFile}/{$totalFiles}: {$fileName} ({$processedInFile}/{$totalRows} records)"
+                            : "Processing {$fileName} ({$processedInFile}/{$totalRows} records)";
+
+                        $this->updateProgress($overallProgress, $message, $this->stats['successful']);
+                        $this->updateFileStatus($currentFile - 1, 'processing', $processedInFile);
+                        $this->updateStats();
+                        $lastProgressUpdate = $fileProgress;
+                    }
                 }
             }
 
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 $this->insertBatch($batch);
             }
 
@@ -430,15 +662,36 @@ class ImportOnsudCommand extends Command
     {
         $data = array_combine($header, $row);
 
-        if (!$this->validateRequiredFields($data)) {
+        $postcodeFilter = $this->option('postcode-filter');
+        if ($postcodeFilter) {
+            $postcode = strtoupper($this->col($data, 'PCDS') ?? '');
+            if (! str_starts_with($postcode, strtoupper($postcodeFilter))) {
+                $this->stats['filtered_by_postcode']++;
+
+                return null;
+            }
+        }
+
+        $ladFilter = $this->option('lad-filter');
+        if ($ladFilter) {
+            $ladCode = $this->col($data, 'LAD');
+            if (empty($ladCode) || strtoupper($ladCode) !== strtoupper($ladFilter)) {
+                $this->stats['filtered_by_postcode']++;
+
+                return null;
+            }
+        }
+
+        if (! $this->validateRequiredFields($data)) {
             return null;
         }
 
-        $easting = (int) $data['GRIDGB1E'];
-        $northing = (int) $data['GRIDGB1N'];
+        $easting = (int) $this->col($data, 'GRIDGB1E');
+        $northing = (int) $this->col($data, 'GRIDGB1N');
 
-        if (!$this->validateCoordinates($easting, $northing)) {
+        if (! $this->validateCoordinates($easting, $northing)) {
             $this->stats['coordinate_errors']++;
+
             return null;
         }
 
@@ -446,26 +699,27 @@ class ImportOnsudCommand extends Command
             $wgs84 = $this->coordinateConverter->osGridToWgs84($easting, $northing);
         } catch (\InvalidArgumentException $e) {
             $this->stats['coordinate_errors']++;
+
             return null;
         }
 
         return [
-            'uprn' => (int) $data['UPRN'],
-            'pcds' => trim(strtoupper($data['PCDS'])),
+            'uprn' => (int) $this->col($data, 'UPRN'),
+            'pcds' => trim(strtoupper($this->col($data, 'PCDS') ?? '')),
             'gridgb1e' => $easting,
             'gridgb1n' => $northing,
             'lat' => $wgs84['lat'],
             'lng' => $wgs84['lng'],
-            'wd25cd' => !empty($data['WD25CD']) ? $data['WD25CD'] : null,
-            'ced25cd' => !empty($data['CED25CD']) ? $data['CED25CD'] : null,
-            'parncp25cd' => !empty($data['PARNCP25CD']) ? $data['PARNCP25CD'] : null,
-            'lad25cd' => $data['LAD25CD'],
-            'pcon24cd' => !empty($data['PCON24CD']) ? $data['PCON24CD'] : null,
-            'lsoa21cd' => !empty($data['LSOA21CD']) ? $data['LSOA21CD'] : null,
-            'msoa21cd' => !empty($data['MSOA21CD']) ? $data['MSOA21CD'] : null,
-            'rgn25cd' => !empty($data['RGN25CD']) ? $data['RGN25CD'] : null,
-            'ruc21ind' => !empty($data['RUC21IND']) ? $data['RUC21IND'] : null,
-            'pfa23cd' => !empty($data['PFA23CD']) ? $data['PFA23CD'] : null,
+            'wd25cd' => $this->col($data, 'WD') ?: null,
+            'ced25cd' => $this->col($data, 'CED') ?: null,
+            'parncp25cd' => $this->col($data, 'PARNCP') ?: null,
+            'lad25cd' => $this->col($data, 'LAD'),
+            'pcon24cd' => $this->col($data, 'PCON') ?: null,
+            'lsoa21cd' => $this->col($data, 'LSOA') ?: null,
+            'msoa21cd' => $this->col($data, 'MSOA') ?: null,
+            'rgn25cd' => $this->col($data, 'RGN') ?: null,
+            'ruc21ind' => $this->col($data, 'RUC') ?: null,
+            'pfa23cd' => $this->col($data, 'PFA') ?: null,
         ];
     }
 
@@ -613,23 +867,190 @@ class ImportOnsudCommand extends Command
 
         $progressBar->finish();
         $this->newLine(2);
+
+        // Handle spatial index: after swap, the staging spatial index was renamed
+        // with the table.  Rename it to the canonical name, or create if missing.
+        $this->info('Ensuring spatial index on properties...');
+        try {
+            $hasStagingGeom = DB::selectOne(
+                "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_properties_staging_geom'"
+            );
+            $hasLiveGeom = DB::selectOne(
+                "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_properties_geom'"
+            );
+
+            if ($hasStagingGeom && ! $hasLiveGeom) {
+                DB::statement(
+                    "ALTER INDEX idx_properties_staging_geom RENAME TO idx_properties_geom"
+                );
+                $this->info('Renamed staging spatial index.');
+            } elseif (! $hasLiveGeom) {
+                $original = DB::selectOne("SHOW maintenance_work_mem")->maintenance_work_mem;
+                DB::statement("SET maintenance_work_mem = '512MB'");
+                DB::statement(
+                    'CREATE INDEX idx_properties_geom ON properties USING GIST (ST_SetSRID(ST_MakePoint(lng, lat), 4326))'
+                );
+                DB::statement("SET maintenance_work_mem = '{$original}'");
+                $this->info('Spatial index created.');
+            } else {
+                $this->info('Spatial index already exists.');
+            }
+        } catch (\Exception $e) {
+            $this->error('Failed to ensure spatial index: ' . $e->getMessage());
+        }
+
         $this->info("Index creation completed!");
+    }
+
+    /**
+     * Reconcile geography code columns on properties_staging by spatial
+     * point-in-polygon lookup against the live boundary_geometries table.
+     * This corrects ONSUD assignment errors where properties near boundary
+     * edges were given the wrong ward / parish / CED / constituency / etc.
+     */
+    private function reconcileGeographyCodes(): void
+    {
+        $this->updateStep('reconcile', 'active', 0, 'Reconciling geography codes...');
+        $this->info('Starting geography code reconciliation on staging table...');
+        $this->info('This uses PostGIS spatial containment against boundary polygons.');
+
+        // Ensure spatial index exists on staging table for fast queries
+        $this->createStagingSpatialIndex();
+
+        $totalCorrected = 0;
+
+        // Map: boundary_type in boundary_geometries => column in properties_staging
+        $reconcilers = [
+            ['type' => 'wards',              'column' => 'wd25cd',      'label' => 'Ward'],
+            ['type' => 'parishes',           'column' => 'parncp25cd',  'label' => 'Parish'],
+            ['type' => 'ced',                'column' => 'ced25cd',     'label' => 'County Electoral Division'],
+            ['type' => 'constituencies',     'column' => 'pcon24cd',    'label' => 'Parliamentary Constituency'],
+            ['type' => 'region',             'column' => 'rgn25cd',     'label' => 'Region'],
+            ['type' => 'police_force_areas', 'column' => 'pfa23cd',     'label' => 'Police Force Area'],
+            ['type' => 'lad',                'column' => 'lad25cd',     'label' => 'Local Authority'],
+        ];
+
+        $totalTypes = count($reconcilers);
+        foreach ($reconcilers as $index => $rec) {
+            $step = $index + 1;
+            $type = $rec['type'];
+            $column = $rec['column'];
+            $label = $rec['label'];
+
+            $this->info("[{$step}/{$totalTypes}] Reconciling {$label} codes ({$type})...");
+
+            // Check whether we have polygons for this boundary type
+            $polygonCount = DB::table('boundary_geometries')
+                ->where('boundary_type', $type)
+                ->whereNotNull('geom')
+                ->count();
+
+            if ($polygonCount === 0) {
+                $this->warn("  No polygons found for {$type}, skipping.");
+                continue;
+            }
+
+            $this->info("  {$polygonCount} polygons available.");
+
+            $start = microtime(true);
+
+            // Run the spatial update.  When a point falls on a boundary edge
+            // and intersects multiple polygons, we pick the largest polygon
+            // by area as the definitive match.
+            $affected = DB::affectingStatement(
+                "WITH matches AS (
+                    SELECT DISTINCT ON (p.uprn) p.uprn, bg.gss_code
+                    FROM properties_staging p
+                    JOIN boundary_geometries bg
+                        ON bg.boundary_type = ?
+                        AND bg.geom IS NOT NULL
+                        AND ST_Intersects(
+                            ST_SetSRID(ST_MakePoint(p.lng, p.lat), 4326),
+                            bg.geom
+                        )
+                    WHERE p.lat IS NOT NULL
+                      AND p.lng IS NOT NULL
+                    ORDER BY p.uprn, ST_Area(bg.geom::geography) DESC
+                )
+                UPDATE properties_staging p
+                SET {$column} = m.gss_code
+                FROM matches m
+                WHERE p.uprn = m.uprn
+                  AND p.{$column} IS DISTINCT FROM m.gss_code",
+                [$type]
+            );
+
+            $elapsed = round(microtime(true) - $start, 1);
+            $this->info("  {$affected} rows corrected in {$elapsed}s");
+            $totalCorrected += $affected;
+
+            $progress = round(($step / $totalTypes) * 100, 1);
+            $this->updateStep('reconcile', 'active', $progress, "{$label}: {$affected} corrected ({$step}/{$totalTypes})");
+        }
+
+        $this->updateStep('reconcile', 'completed', 100, number_format($totalCorrected) . ' rows corrected across all types');
+        $this->info('Geography code reconciliation complete: ' . number_format($totalCorrected) . ' rows corrected.');
+    }
+
+    /**
+     * Create a GIST spatial index on properties_staging for fast
+     * point-in-polygon reconciliation queries.
+     */
+    private function createStagingSpatialIndex(): void
+    {
+        $this->info('Ensuring spatial index on properties_staging...');
+
+        $hasIndex = DB::selectOne(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_properties_staging_geom'"
+        );
+
+        if ($hasIndex) {
+            $this->info('  Spatial index already exists.');
+            return;
+        }
+
+        $original = DB::selectOne("SHOW maintenance_work_mem")->maintenance_work_mem;
+        DB::statement("SET maintenance_work_mem = '512MB'");
+
+        DB::statement(
+            'CREATE INDEX idx_properties_staging_geom ON properties_staging USING GIST (ST_SetSRID(ST_MakePoint(lng, lat), 4326))'
+        );
+
+        DB::statement("SET maintenance_work_mem = '{$original}'");
+        $this->info('  Spatial index created.');
     }
 
     private function createDataVersion(string $csvPath, int $epoch, string $releaseDate): void
     {
         $logFile = $this->option('log-file');
+        $dataVersionId = $this->option('data-version-id');
 
-        // Use updateOrCreate to handle re-imports of the same epoch
-        $this->dataVersion = DataVersion::updateOrCreate(
-            [
-                'dataset' => 'ONSUD',
+        $steps = [
+            ['key' => 'discover',  'label' => 'Discover Latest Release',       'status' => 'completed', 'progress' => 100, 'message' => "Epoch {$epoch} discovered"],
+            ['key' => 'download',  'label' => 'Download ONSUD ZIP',           'status' => 'completed', 'progress' => 100, 'message' => 'Download complete'],
+            ['key' => 'extract',   'label' => 'Extract ZIP Archive',          'status' => 'completed', 'progress' => 100, 'message' => 'Extraction complete'],
+            ['key' => 'import',    'label' => 'Import CSVs to Staging',      'status' => 'active',    'progress' => 0,   'message' => 'Starting import...'],
+            ['key' => 'lookups',   'label' => 'Import Geography Lookups',     'status' => 'pending',   'progress' => 0,   'message' => null],
+            ['key' => 'reconcile', 'label' => 'Reconcile Geography Codes',    'status' => 'pending',   'progress' => 0,   'message' => null],
+            ['key' => 'validate',  'label' => 'Validate Staging Table',       'status' => 'pending',   'progress' => 0,   'message' => null],
+            ['key' => 'swap',      'label' => 'Swap Production Table',        'status' => 'pending',   'progress' => 0,   'message' => null],
+            ['key' => 'index',     'label' => 'Create Indexes',               'status' => 'pending',   'progress' => 0,   'message' => null],
+        ];
+
+        if ($dataVersionId) {
+            // Pre-created record from the dashboard — update it with discovered info
+            $this->dataVersion = DataVersion::findOrFail($dataVersionId);
+
+            // Remove any existing record with the same (dataset, epoch) to avoid
+            // unique-constraint violations when we update the pre-created record.
+            DataVersion::where('dataset', 'ONSUD')
+                ->where('epoch', $epoch)
+                ->where('id', '!=', $this->dataVersion->id)
+                ->delete();
+
+            $this->dataVersion->update([
                 'epoch' => $epoch,
-            ],
-            [
                 'release_date' => $releaseDate,
-                'imported_at' => now(),
-                'record_count' => null,
                 'file_hash' => hash_file('sha256', $csvPath),
                 'status' => 'importing',
                 'progress_percentage' => 0,
@@ -638,10 +1059,36 @@ class ImportOnsudCommand extends Command
                 'total_files' => 1,
                 'log_file' => $logFile,
                 'notes' => "Import started at " . now()->toDateTimeString(),
-            ]
-        );
+                'steps' => $steps,
+                'current_step' => 'import',
+            ]);
+            $action = 'Updated pre-created';
+        } else {
+            // Use updateOrCreate to handle re-imports of the same epoch
+            $this->dataVersion = DataVersion::updateOrCreate(
+                [
+                    'dataset' => 'ONSUD',
+                    'epoch' => $epoch,
+                ],
+                [
+                    'release_date' => $releaseDate,
+                    'imported_at' => now(),
+                    'record_count' => null,
+                    'file_hash' => hash_file('sha256', $csvPath),
+                    'status' => 'importing',
+                    'progress_percentage' => 0,
+                    'status_message' => 'Starting import...',
+                    'current_file' => 1,
+                    'total_files' => 1,
+                    'log_file' => $logFile,
+                    'notes' => "Import started at " . now()->toDateTimeString(),
+                    'steps' => $steps,
+                    'current_step' => 'import',
+                ]
+            );
+            $action = $this->dataVersion->wasRecentlyCreated ? 'Created' : 'Updated existing';
+        }
 
-        $action = $this->dataVersion->wasRecentlyCreated ? 'Created' : 'Updated existing';
         $this->info("{$action} data version record (ID: {$this->dataVersion->id})");
 
         Log::info('ONSUD Import Started', [
@@ -674,7 +1121,7 @@ class ImportOnsudCommand extends Command
         $this->info("Initialized tracking for " . count($csvFiles) . " file(s)");
     }
 
-    private function updateFileStatus(int $fileIndex, string $status, ?int $processed = null): void
+    private function updateFileStatus(int $fileIndex, string $status, ?int $processed = null, ?int $total = null): void
     {
         if (!$this->dataVersion || !$this->dataVersion->files) {
             return;
@@ -685,6 +1132,9 @@ class ImportOnsudCommand extends Command
             $files[$fileIndex]['status'] = $status;
             if ($processed !== null) {
                 $files[$fileIndex]['processed'] = $processed;
+            }
+            if ($total !== null) {
+                $files[$fileIndex]['total'] = $total;
             }
             $this->dataVersion->update(['files' => $files]);
         }
@@ -703,7 +1153,7 @@ class ImportOnsudCommand extends Command
 
     private function updateProgress(float $percentage, string $message, ?int $currentRecords = null): void
     {
-        if (!$this->dataVersion) {
+        if (! $this->dataVersion) {
             return;
         }
 
@@ -712,11 +1162,14 @@ class ImportOnsudCommand extends Command
             'status_message' => $message,
             'record_count' => $currentRecords ?? $this->dataVersion->record_count,
         ]);
+
+        // Also update the import step
+        $this->updateStep('import', 'active', $percentage, $message);
     }
 
     private function updateDataVersionStatus(string $status, ?string $notes = null): void
     {
-        if (!$this->dataVersion) {
+        if (! $this->dataVersion) {
             return;
         }
 
@@ -727,6 +1180,50 @@ class ImportOnsudCommand extends Command
         ]);
 
         $this->info("Updated data version status to: {$status}");
+    }
+
+    /**
+     * Update a named step in the steps JSON array.
+     * Status can be: pending, active, completed, failed.
+     */
+    private function updateStep(string $key, string $status, ?float $progress = null, ?string $message = null): void
+    {
+        if (! $this->dataVersion) {
+            return;
+        }
+
+        $steps = $this->dataVersion->steps ?? [];
+
+        foreach ($steps as &$step) {
+            if ($step['key'] === $key) {
+                $step['status'] = $status;
+                if ($progress !== null) {
+                    $step['progress'] = round($progress, 1);
+                }
+                if ($message !== null) {
+                    $step['message'] = $message;
+                }
+            }
+            // Cascade: mark all earlier steps as completed if current is active/completed
+            if (in_array($status, ['active', 'completed'], true)) {
+                $currentIndex = array_search($key, array_column($steps, 'key'));
+                foreach ($steps as $i => &$s) {
+                    if ($i < $currentIndex && $s['status'] !== 'completed' && $s['status'] !== 'failed') {
+                        $s['status'] = 'completed';
+                        $s['progress'] = 100;
+                    }
+                }
+            }
+        }
+
+        $update = [
+            'steps' => $steps,
+        ];
+        if ($status === 'active') {
+            $update['current_step'] = $key;
+        }
+
+        $this->dataVersion->update($update);
     }
 
     private function archiveOldVersions(): void
@@ -769,17 +1266,20 @@ class ImportOnsudCommand extends Command
     {
         $this->newLine();
         $this->info("Import Statistics:");
-        $this->table(
-            ['Metric', 'Count'],
-            [
-                ['Total Rows', number_format($this->stats['total_rows'])],
-                ['Successful', number_format($this->stats['successful'])],
-                ['Skipped', number_format($this->stats['skipped'])],
-                ['Errors', number_format($this->stats['errors'])],
-                ['Coordinate Errors', number_format($this->stats['coordinate_errors'])],
-                ['Missing Required Fields', number_format($this->stats['missing_required_fields'])],
-            ]
-        );
+        $metrics = [
+            ['Total Rows', number_format($this->stats['total_rows'])],
+            ['Successful', number_format($this->stats['successful'])],
+            ['Skipped', number_format($this->stats['skipped'])],
+            ['Errors', number_format($this->stats['errors'])],
+            ['Coordinate Errors', number_format($this->stats['coordinate_errors'])],
+            ['Missing Required Fields', number_format($this->stats['missing_required_fields'])],
+        ];
+
+        if ($this->stats['filtered_by_postcode'] > 0) {
+            $metrics[] = ['Filtered by Postcode', number_format($this->stats['filtered_by_postcode'])];
+        }
+
+        $this->table(['Metric', 'Count'], $metrics);
 
         $successRate = $this->stats['total_rows'] > 0
             ? ($this->stats['successful'] / $this->stats['total_rows']) * 100
@@ -804,6 +1304,8 @@ class ImportOnsudCommand extends Command
         $this->info("URL: {$url}");
         $this->info("Destination: {$destination}");
 
+        $this->updateStep('download', 'active', 0, 'Starting download...');
+
         try {
             // Use Laravel HTTP client with streaming for large files
             $response = Http::timeout(3600)->withOptions([
@@ -811,14 +1313,16 @@ class ImportOnsudCommand extends Command
                 'progress' => function ($downloadTotal, $downloadedBytes, $uploadTotal, $uploadedBytes) {
                     if ($downloadTotal > 0) {
                         $percentage = round(($downloadedBytes / $downloadTotal) * 100, 1);
+                        $message = sprintf(
+                            'Downloaded: %s / %s (%s%%)',
+                            $this->formatFileSize($downloadedBytes),
+                            $this->formatFileSize($downloadTotal),
+                            $percentage
+                        );
+                        $this->updateStep('download', 'active', $percentage, $message);
                         if ($downloadedBytes > 0 && $downloadedBytes % (10 * 1024 * 1024) === 0) {
                             // Update every 10MB
-                            $this->info(sprintf(
-                                "Downloaded: %s / %s (%s%%)",
-                                $this->formatFileSize($downloadedBytes),
-                                $this->formatFileSize($downloadTotal),
-                                $percentage
-                            ));
+                            $this->info($message);
                         }
                     }
                 },
@@ -826,6 +1330,7 @@ class ImportOnsudCommand extends Command
 
             if ($response->successful() && File::exists($destination)) {
                 $size = filesize($destination);
+                $this->updateStep('download', 'completed', 100, "Download complete: " . $this->formatFileSize($size));
                 $this->info("Download complete! Size: " . $this->formatFileSize($size));
                 return $destination;
             }
@@ -846,29 +1351,71 @@ class ImportOnsudCommand extends Command
     }
 
     /**
-     * Attempt to download ONSUD file
-     *
-     * Note: Automatic download is not currently supported for ONSUD.
-     * The ONS Open Geography Portal uses ArcGIS Hub which doesn't provide
-     * direct download URLs for large datasets (2-3GB+ files, 41M+ records).
-     *
-     * Users must download manually from the portal.
+     * Attempt to download ONSUD file from ArcGIS Online
      */
     private function downloadOnsudFile(string $epoch): ?string
     {
         $this->newLine();
-        $this->warn("Automatic download not available for ONSUD.");
-        $this->warn("ONSUD files are very large (2-3GB) and must be downloaded manually.");
-        $this->newLine();
+        $this->info("Attempting automatic download of ONSUD epoch {$epoch} from ArcGIS...");
 
-        // Automatic download is not feasible because:
-        // 1. ONS uses ArcGIS Hub which generates downloads on-demand via browser
-        // 2. No static/direct download URLs exist for ONSUD ZIP files
-        // 3. Portal requires JavaScript/interactive session to trigger export
-        //
-        // Future enhancement: Could use Selenium/Playwright for browser automation
+        // If we already discovered this release, use the cached item ID
+        if ($this->discoveredRelease && (int) $this->discoveredRelease['epoch'] === (int) $epoch) {
+            $itemId = $this->discoveredRelease['item_id'];
+            $filename = $this->discoveredRelease['name'];
 
-        return null;
+            return $this->downloadArcGISItem($itemId, $filename, $epoch);
+        }
+
+        // Search ArcGIS for this specific epoch
+        $searchUrl = 'https://www.arcgis.com/sharing/rest/search';
+        $params = [
+            'q' => 'type:"CSV Collection" owner:ONSGeography_data ONSUD',
+            'sortField' => 'modified',
+            'sortOrder' => 'desc',
+            'num' => 50,
+            'f' => 'json',
+        ];
+
+        try {
+            $response = Http::timeout(30)->get($searchUrl, $params);
+
+            if (! $response->successful()) {
+                $this->error('ArcGIS search failed: ' . $response->status());
+
+                return null;
+            }
+
+            $data = $response->json();
+
+            if (empty($data['results'])) {
+                $this->error('No ONSUD releases found on ArcGIS');
+
+                return null;
+            }
+
+            foreach ($data['results'] as $item) {
+                if (str_contains($item['title'], 'User Guide')) {
+                    continue;
+                }
+                if ($item['type'] !== 'CSV Collection') {
+                    continue;
+                }
+
+                $itemEpoch = $this->parseEpochFromTitle($item['title']);
+                if ((int) $itemEpoch === (int) $epoch) {
+                    return $this->downloadArcGISItem($item['id'], $item['name'], $epoch);
+                }
+            }
+
+            $this->error("ONSUD epoch {$epoch} not found on ArcGIS");
+
+            return null;
+
+        } catch (\Exception $e) {
+            $this->error('Automatic download failed: ' . $e->getMessage());
+
+            return null;
+        }
     }
 
     /**
@@ -903,6 +1450,231 @@ class ImportOnsudCommand extends Command
     }
 
     /**
+     * Import geography lookup files from the Documents folder into boundary_names.
+     */
+    private function importLookupFiles(string $extractPath, int $epoch, string $releaseDate): void
+    {
+        $documentsPath = $extractPath . '/Documents';
+        if (! File::isDirectory($documentsPath)) {
+            return;
+        }
+
+        $csvFiles = File::glob("{$documentsPath}/*.csv");
+        if (empty($csvFiles)) {
+            $this->info('No lookup CSV files found in Documents folder');
+
+            return;
+        }
+
+        // Map filename prefixes to boundary_type
+        $typeMap = [
+            'BUA' => 'bua',
+            'CED' => 'ced',
+            'CTRY' => 'country',
+            'CTY' => 'county',
+            'EER' => 'eer',
+            'HLTHAU' => 'hlthau',
+            'LEP' => 'lep',
+            'LSOA' => 'lsoa',
+            'MSOA' => 'msoa',
+            'NPARK' => 'npark',
+            'PARNCP' => 'parish',
+            'PCON' => 'constituency',
+            'PFA' => 'police_force_area',
+            'RGN' => 'region',
+            'RUC21' => 'ruc',
+            'SICBL' => 'sicbl',
+            'TTWA' => 'ttwa',
+            'WD' => 'ward',
+            'LAD' => 'lad',
+        ];
+
+        // Skip ITL (complex combined lookup) and Scotland-specific files that use different codes
+        $skipPatterns = ['/ITL/i', '/SC as at/i', '/_SC_/i'];
+
+        $lookupFiles = [];
+        foreach ($csvFiles as $csvPath) {
+            $name = basename($csvPath);
+            $skip = false;
+            foreach ($skipPatterns as $pattern) {
+                if (preg_match($pattern, $name)) {
+                    $skip = true;
+                    break;
+                }
+            }
+            if ($skip) {
+                continue;
+            }
+
+            $boundaryType = null;
+            foreach ($typeMap as $prefix => $type) {
+                if (str_starts_with($name, $prefix)) {
+                    $boundaryType = $type;
+                    break;
+                }
+            }
+
+            if ($boundaryType) {
+                $lookupFiles[] = [
+                    'path' => $csvPath,
+                    'name' => $name,
+                    'type' => $boundaryType,
+                ];
+            }
+        }
+
+        if (empty($lookupFiles)) {
+            $this->info('No matching geography lookup files found');
+
+            return;
+        }
+
+        $this->info('Found ' . count($lookupFiles) . ' geography lookup file(s) to import');
+        $this->updateStep('lookups', 'active', 0, 'Importing ' . count($lookupFiles) . ' geography lookup file(s)...');
+
+        // Append lookup files to existing file tracking
+        $existingFiles = $this->dataVersion->files ?? [];
+        $baseIndex = count($existingFiles);
+        foreach ($lookupFiles as $lookup) {
+            $existingFiles[] = [
+                'name' => $lookup['name'],
+                'path' => $lookup['path'],
+                'total' => null,
+                'processed' => 0,
+                'status' => 'pending',
+                'type' => 'lookup',
+                'boundary_type' => $lookup['type'],
+            ];
+        }
+
+        $this->dataVersion->update([
+            'total_files' => $baseIndex + count($lookupFiles),
+            'files' => $existingFiles,
+        ]);
+
+        $source = 'ONSUD_Lookup';
+        $versionDate = $releaseDate;
+
+        foreach ($lookupFiles as $index => $lookup) {
+            $fileIndex = $baseIndex + $index;
+            $this->updateFileStatus($fileIndex, 'processing');
+            $this->info("Importing lookup file " . ($index + 1) . "/" . count($lookupFiles) . ": {$lookup['name']}");
+
+            try {
+                $count = $this->importSingleLookupFile($lookup['path'], $lookup['type'], $source, $versionDate);
+                $this->updateFileStatus($fileIndex, 'completed', $count, $count);
+
+                $progress = round((($index + 1) / count($lookupFiles)) * 100, 1);
+                $message = "Imported {$lookup['type']} lookups ({$count} rows) from {$lookup['name']}";
+                $this->updateStep('lookups', 'active', $progress, $message);
+                $this->info("  {$count} rows imported");
+            } catch (\Throwable $e) {
+                $this->updateFileStatus($fileIndex, 'failed');
+                $this->error("Failed to import {$lookup['name']}: " . $e->getMessage());
+            }
+        }
+
+        $this->updateStep('lookups', 'completed', 100, 'Geography lookups imported');
+        $this->info('Geography lookup import complete');
+    }
+
+    /**
+     * Import a single lookup CSV into boundary_names.
+     */
+    private function importSingleLookupFile(string $csvPath, string $boundaryType, string $source, string $versionDate): int
+    {
+        $file = fopen($csvPath, 'r');
+        if (! $file) {
+            throw new \RuntimeException("Cannot open lookup file: {$csvPath}");
+        }
+
+        $header = fgetcsv($file);
+        if (! $header) {
+            fclose($file);
+            throw new \RuntimeException("Empty lookup file: {$csvPath}");
+        }
+
+        // Heuristic column detection
+        $codeColumn = null;
+        $nameColumn = null;
+        $nameWelshColumn = null;
+
+        foreach ($header as $col) {
+            $upper = strtoupper($col);
+            if ($codeColumn === null && str_ends_with($upper, 'CD') && ! str_ends_with($upper, 'NMCD')) {
+                $codeColumn = $col;
+            }
+            if ($nameColumn === null && str_ends_with($upper, 'NM') && ! str_ends_with($upper, 'NMW')) {
+                $nameColumn = $col;
+            }
+            if ($nameWelshColumn === null && str_ends_with($upper, 'NMW')) {
+                $nameWelshColumn = $col;
+            }
+        }
+
+        if ($codeColumn === null || $nameColumn === null) {
+            fclose($file);
+            throw new \RuntimeException("Could not detect code/name columns in {$csvPath}");
+        }
+
+        $batch = [];
+        $batchSize = 1000;
+        $imported = 0;
+
+        while (($row = fgetcsv($file)) !== false) {
+            $data = array_combine($header, $row);
+            if ($data === false) {
+                continue;
+            }
+
+            $gssCode = trim($data[$codeColumn] ?? '');
+            $name = trim($data[$nameColumn] ?? '');
+
+            if (empty($gssCode) || empty($name)) {
+                continue;
+            }
+
+            $batch[] = [
+                'boundary_type' => $boundaryType,
+                'gss_code' => $gssCode,
+                'name' => $name,
+                'name_welsh' => $nameWelshColumn ? ($data[$nameWelshColumn] ?? null) : null,
+                'source' => $source,
+                'version_date' => $versionDate,
+                'updated_at' => now(),
+                'created_at' => now(),
+            ];
+
+            if (count($batch) >= $batchSize) {
+                $this->upsertBoundaryNames($batch);
+                $imported += count($batch);
+                $batch = [];
+            }
+        }
+
+        if (! empty($batch)) {
+            $this->upsertBoundaryNames($batch);
+            $imported += count($batch);
+        }
+
+        fclose($file);
+
+        return $imported;
+    }
+
+    /**
+     * Upsert a batch of boundary names, matching on (boundary_type, gss_code).
+     */
+    private function upsertBoundaryNames(array $batch): void
+    {
+        DB::table('boundary_names')->upsert(
+            $batch,
+            ['boundary_type', 'gss_code'],
+            ['name', 'name_welsh', 'source', 'version_date', 'updated_at']
+        );
+    }
+
+    /**
      * Format file size in human-readable format
      */
     private function formatFileSize(int $bytes): string
@@ -917,6 +1689,215 @@ class ImportOnsudCommand extends Command
         }
 
         return round($size, 2) . ' ' . $units[$unitIndex];
+    }
+
+    /**
+     * Delete extracted CSV files and their parent directories after a successful import.
+     */
+    private function cleanupExtractedFiles(): void
+    {
+        if (empty($this->cleanupPaths)) {
+            return;
+        }
+
+        $deletedFiles = 0;
+        $deletedDirs = [];
+
+        foreach ($this->cleanupPaths as $csvPath) {
+            if (File::exists($csvPath)) {
+                File::delete($csvPath);
+                $deletedFiles++;
+            }
+
+            // Track parent directories for deletion
+            $dir = dirname($csvPath);
+            while ($dir && str_contains($dir, 'onsud') && ! in_array($dir, $deletedDirs, true)) {
+                $deletedDirs[] = $dir;
+                $dir = dirname($dir);
+            }
+        }
+
+        // Delete empty directories (newest/deepest first to avoid non-empty errors)
+        rsort($deletedDirs);
+        foreach ($deletedDirs as $dir) {
+            if (File::isDirectory($dir) && count(File::files($dir)) === 0 && count(File::directories($dir)) === 0) {
+                File::deleteDirectory($dir);
+            }
+        }
+
+        if ($deletedFiles > 0) {
+            $this->info("Cleaned up {$deletedFiles} extracted CSV file(s)");
+        }
+    }
+
+    /**
+     * Discover the latest ONSUD release from ArcGIS Online
+     */
+    private function discoverLatestOnsudRelease(): ?array
+    {
+        $searchUrl = 'https://www.arcgis.com/sharing/rest/search';
+        $params = [
+            'q' => 'type:"CSV Collection" owner:ONSGeography_data ONSUD',
+            'sortField' => 'modified',
+            'sortOrder' => 'desc',
+            'num' => 20,
+            'f' => 'json',
+        ];
+
+        try {
+            $response = Http::timeout(30)->get($searchUrl, $params);
+
+            if (! $response->successful()) {
+                Log::warning('ArcGIS search failed', ['status' => $response->status()]);
+
+                return null;
+            }
+
+            $data = $response->json();
+
+            if (empty($data['results'])) {
+                Log::warning('ArcGIS search returned no results');
+
+                return null;
+            }
+
+            foreach ($data['results'] as $item) {
+                if (str_contains($item['title'], 'User Guide')) {
+                    continue;
+                }
+
+                if ($item['type'] !== 'CSV Collection') {
+                    continue;
+                }
+
+                $epoch = $this->parseEpochFromTitle($item['title']);
+                if (! $epoch) {
+                    continue;
+                }
+
+                $releaseDate = $this->parseDateFromTitle($item['title']);
+                if (! $releaseDate) {
+                    continue;
+                }
+
+                return [
+                    'item_id' => $item['id'],
+                    'name' => $item['name'],
+                    'title' => $item['title'],
+                    'epoch' => $epoch,
+                    'release_date' => $releaseDate,
+                    'size' => $item['size'] ?? null,
+                ];
+            }
+
+            Log::warning('No valid ONSUD release found in ArcGIS search results');
+
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('ONSUD discovery failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Parse epoch number from ONSUD item title
+     */
+    private function parseEpochFromTitle(string $title): ?int
+    {
+        if (preg_match('/Epoch\s+(\d+)/i', $title, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse release date from ONSUD item title
+     */
+    private function parseDateFromTitle(string $title): ?string
+    {
+        if (preg_match('/\(([A-Za-z]+)\s+(\d{4})\)/', $title, $matches)) {
+            $monthName = $matches[1];
+            $year = $matches[2];
+
+            $monthMap = [
+                'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+                'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+                'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12',
+            ];
+
+            $monthNum = $monthMap[$monthName] ?? null;
+            if ($monthNum) {
+                return "{$year}-{$monthNum}-01";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download an item from ArcGIS Online by item ID
+     */
+    private function downloadArcGISItem(string $itemId, string $filename, string $epoch): ?string
+    {
+        $downloadUrl = "https://www.arcgis.com/sharing/rest/content/items/{$itemId}/data";
+        $destination = storage_path("app/onsud/epoch-{$epoch}-" . date('YmdHis') . '.zip');
+
+        $destinationDir = dirname($destination);
+        if (! File::exists($destinationDir)) {
+            File::makeDirectory($destinationDir, 0755, true);
+        }
+
+        $this->info("Downloading {$filename} from ArcGIS...");
+        $this->info("Destination: {$destination}");
+
+        $this->updateStep('download', 'active', 0, 'Starting download from ArcGIS...');
+
+        try {
+            $response = Http::timeout(3600)->withOptions([
+                'sink' => $destination,
+                'progress' => function ($downloadTotal, $downloadedBytes) {
+                    if ($downloadTotal > 0) {
+                        $percentage = round(($downloadedBytes / $downloadTotal) * 100, 1);
+                        $message = sprintf(
+                            'Downloaded: %s / %s (%s%%)',
+                            $this->formatFileSize($downloadedBytes),
+                            $this->formatFileSize($downloadTotal),
+                            $percentage
+                        );
+                        $this->updateStep('download', 'active', $percentage, $message);
+                        if ($downloadedBytes > 0 && $downloadedBytes % (50 * 1024 * 1024) === 0) {
+                            $this->info($message);
+                        }
+                    }
+                },
+            ])->get($downloadUrl);
+
+            if ($response->successful() && File::exists($destination) && filesize($destination) > 0) {
+                $size = filesize($destination);
+                $this->updateStep('download', 'completed', 100, "Download complete: " . $this->formatFileSize($size));
+                $this->info('Download complete! Size: ' . $this->formatFileSize($size));
+
+                return $destination;
+            }
+
+            $this->error('Download failed with status: ' . $response->status());
+            if (File::exists($destination)) {
+                File::delete($destination);
+            }
+
+            return null;
+
+        } catch (\Exception $e) {
+            $this->error('Download failed: ' . $e->getMessage());
+            if (File::exists($destination)) {
+                File::delete($destination);
+            }
+
+            return null;
+        }
     }
 
     /**

@@ -50,8 +50,8 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
                 throw new \RuntimeException("GeoJSON file not found: {$this->geoJsonPath}");
             }
 
-            // Extract ONS version date from filename
-            $onsVersionDate = $this->extractOnsVersionFromFilename(basename($this->geoJsonPath));
+            // Extract ONS version date from import metadata (or filename as fallback)
+            $onsVersionDate = $import->metadata['version_date'] ?? $this->extractOnsVersionFromFilename(basename($this->geoJsonPath));
 
             // Process GeoJSON file
             $this->processGeoJson($import, $onsVersionDate);
@@ -222,8 +222,8 @@ class ProcessBoundaryGeometryFromGeoJson implements ShouldQueue
                     'boundary_type' => $this->boundaryType,
                     'gss_code' => $gssCode,
                     'name' => $name,
-                    'geometry' => json_encode($geometry),
-                    'properties' => json_encode($properties),
+                    'geometry' => json_encode($geometry, JSON_UNESCAPED_UNICODE),
+                    'properties' => json_encode($properties, JSON_UNESCAPED_UNICODE),
                     'area_hectares' => $areaHectares,
                     'bounding_box' => $boundingBox,
                     'source_file' => basename($this->geoJsonPath),

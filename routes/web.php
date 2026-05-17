@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\BoundaryImportController;
 use App\Http\Controllers\ApiDocumentationController;
 use App\Livewire\Admin\ApiTokenManager;
 use App\Livewire\Admin\BoundaryImport;
@@ -13,6 +14,7 @@ use App\Livewire\Auth\Login;
 use App\Livewire\Tools\BoundaryViewer;
 use App\Livewire\Tools\CoordinateCalibration;
 use App\Livewire\Tools\PostcodeLookup;
+use App\Livewire\Dashboard;
 use App\Livewire\Tools\PostcodeMap;
 use App\Livewire\Tools\PropertyMap;
 use Illuminate\Support\Facades\Auth;
@@ -35,15 +37,14 @@ Route::post('/logout', function () {
 // Authenticated routes
 Route::middleware(['auth'])->group(function () {
     // Dashboard
-    Route::get('/', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    Route::get('/', Dashboard::class)->name('dashboard');
 
     // Admin routes
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/import', ImportManager::class)->name('import');
         Route::get('/import/progress/{import}', ImportProgress::class)->name('import.progress');
         Route::get('/boundaries', BoundaryImport::class)->name('boundaries');
+        Route::post('/boundaries/upload', [BoundaryImportController::class, 'upload'])->name('boundaries.upload');
         Route::get('/versions', DataVersionTable::class)->name('versions');
         Route::get('/cleanup', CleanupManager::class)->name('cleanup');
         Route::get('/users', UserManager::class)->name('users');

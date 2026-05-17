@@ -11,17 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
+        $tableExists = DB::select("SELECT to_regclass('public.boundary_geometries') as exists")[0]->exists;
+
+        if (! $tableExists) {
+            return;
+        }
+
         // Add PostGIS geometry column (keeping the JSONB for backwards compatibility)
-        DB::statement("ALTER TABLE boundary_geometries ADD COLUMN geom geometry(Geometry, 4326)");
+        DB::statement("ALTER TABLE boundary_geometries ADD COLUMN IF NOT EXISTS geom geometry(Geometry, 4326)");
 
         // Create spatial index for fast point-in-polygon queries
-        DB::statement("CREATE INDEX boundary_geometries_geom_idx ON boundary_geometries USING GIST (geom)");
+        DB::statement("CREATE INDEX IF NOT EXISTS boundary_geometries_geom_idx ON boundary_geometries USING GIST (geom)");
 
         // Populate geometry column from existing JSONB geometry data
         DB::statement("
             UPDATE boundary_geometries
             SET geom = ST_SetSRID(ST_GeomFromGeoJSON(geometry::text), 4326)
-            WHERE geometry IS NOT NULL
+            WHERE geometry IS NOT NULL AND geom IS NULL
         ");
     }
 

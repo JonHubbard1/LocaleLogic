@@ -1,5 +1,27 @@
 <div class="py-12">
     <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+
+        @if(config('app.env') !== 'production')
+            <flux:card class="mb-6 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                <div class="flex items-start gap-3">
+                    <flux:icon.exclamation-triangle class="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+                    <div>
+                        <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200">Development Mode Active</p>
+                        <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                            ONSUD imports are automatically limited to
+                            @if(config('onsud.dev_lad_filter'))
+                                LAD <strong>{{ config('onsud.dev_lad_filter') }}</strong>
+                            @elseif(config('onsud.dev_postcode_filter'))
+                                postcodes starting with <strong>{{ config('onsud.dev_postcode_filter') }}</strong>
+                            @endif
+                            and capped at <strong>{{ number_format(config('onsud.dev_record_limit')) }}</strong> records.
+                            Use the Dev Mode controls below to override.
+                        </p>
+                    </div>
+                </div>
+            </flux:card>
+        @endif
+
         <flux:heading size="xl" class="mb-6">ONSUD Import Manager</flux:heading>
 
         <div class="grid gap-6 lg:grid-cols-3">
@@ -74,6 +96,39 @@
                         </flux:field>
                         @endif
 
+                        {{-- Dev Mode Toggle --}}
+                        <div class="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <input type="checkbox" wire:model.live="devMode" id="devMode" class="h-4 w-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500" />
+                            <label for="devMode" class="text-sm font-medium text-yellow-800 dark:text-yellow-200 cursor-pointer">
+                                Dev Mode — Import only a subset for testing
+                            </label>
+                        </div>
+
+                        @if($devMode)
+                            <div class="grid gap-6 md:grid-cols-3">
+                                <flux:field>
+                                    <flux:label>Postcode Filter</flux:label>
+                                    <flux:input wire:model="postcodeFilter" type="text" placeholder="SN" />
+                                    <flux:description>Import only records where postcode starts with this prefix.</flux:description>
+                                    <flux:error name="postcodeFilter" />
+                                </flux:field>
+
+                                <flux:field>
+                                    <flux:label>LAD Filter</flux:label>
+                                    <flux:input wire:model="ladFilter" type="text" placeholder="E06000054" />
+                                    <flux:description>Import only records matching this LAD GSS code (e.g., E06000054 for Wiltshire).</flux:description>
+                                    <flux:error name="ladFilter" />
+                                </flux:field>
+
+                                <flux:field>
+                                    <flux:label>Record Limit</flux:label>
+                                    <flux:input wire:model="recordLimit" type="number" min="0" placeholder="5000" />
+                                    <flux:description>Maximum records to import (0 = no limit).</flux:description>
+                                    <flux:error name="recordLimit" />
+                                </flux:field>
+                            </div>
+                        @endif
+
                         <div class="grid gap-6 md:grid-cols-2">
                             <flux:field>
                                 <flux:label>Epoch Number</flux:label>
@@ -94,25 +149,37 @@
                             <flux:description>Number of records to process per batch (recommended: 1,000). PostgreSQL limit: 4,000 max.</flux:description>
                         </flux:field>
 
-                        <flux:button type="submit" variant="primary"
-                                     :disabled="$importing || (!$file && !$downloadUrl)"
-                                     wire:loading.attr="disabled"
-                                     wire:target="file,startImport">
-                            <span wire:loading.remove wire:target="startImport">
-                                @if($importing)
-                                    <flux:icon.arrow-path class="animate-spin" /> Processing...
-                                @else
-                                    <flux:icon.cog-6-tooth /> {{ $useUrl ? 'Download & Process' : 'Process Upload' }}
-                                @endif
-                            </span>
-                            <span wire:loading wire:target="startImport" class="flex items-center gap-2">
-                                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Processing...
-                            </span>
-                        </flux:button>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <flux:button type="submit" variant="primary"
+                                         :disabled="$importing || (!$file && !$downloadUrl)"
+                                         wire:loading.attr="disabled"
+                                         wire:target="file,startImport">
+                                <span wire:loading.remove wire:target="startImport">
+                                    @if($importing)
+                                        <flux:icon.arrow-path class="animate-spin" /> Processing...
+                                    @else
+                                        <flux:icon.cog-6-tooth /> {{ $useUrl ? 'Download & Process' : 'Process Upload' }}
+                                    @endif
+                                </span>
+                                <span wire:loading wire:target="startImport" class="flex items-center gap-2">
+                                    <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Processing...
+                                </span>
+                            </flux:button>
+
+                            <flux:button
+                                type="button"
+                                wire:click="autoDiscover"
+                                variant="ghost"
+                                icon="magnifying-glass"
+                                :disabled="$importing"
+                            >
+                                Auto-Discover Latest
+                            </flux:button>
+                        </div>
                         @if(!$file && !$downloadUrl && !$importing)
                             <p class="text-sm text-gray-500 mt-2">Please {{ $useUrl ? 'provide a URL' : 'upload a file' }} first</p>
                         @endif

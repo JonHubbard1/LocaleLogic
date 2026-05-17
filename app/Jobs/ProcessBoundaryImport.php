@@ -23,7 +23,8 @@ class ProcessBoundaryImport implements ShouldQueue
     public function __construct(
         public string $filePath,
         public string $boundaryType,
-        public string $source = 'manual_upload'
+        public string $source = 'manual_upload',
+        public array $metadata = [],
     ) {
     }
 
@@ -145,6 +146,7 @@ class ProcessBoundaryImport implements ShouldQueue
             'source' => $this->source,
             'file_path' => $this->filePath,
             'file_size' => $fileSize,
+            'metadata' => $this->metadata,
         ]);
 
         Log::info('Created BoundaryImport record for CSV', [
@@ -176,6 +178,7 @@ class ProcessBoundaryImport implements ShouldQueue
             'source' => $this->source,
             'file_path' => $this->filePath,
             'file_size' => $fileSize,
+            'metadata' => $this->metadata,
         ]);
 
         Log::info('Created BoundaryImport record for GeoJSON', ['import_id' => $import->id]);

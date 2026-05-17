@@ -78,6 +78,14 @@ class ProcessParishLookup implements ShouldQueue
             $header[0] = preg_replace('/^\x{FEFF}/u', '', $header[0]);
         }
 
+        // Discover field names dynamically (ONS changes year codes: PAR24CD, PAR25CD, etc.)
+        $fields = $this->discoverFields($header);
+        if (! $fields['par_code'] || ! $fields['wd_code']) {
+            throw new \RuntimeException('Could not discover required parish/ward fields from CSV header: ' . implode(', ', $header));
+        }
+
+        Log::info('Discovered parish lookup fields from CSV', ['fields' => $fields]);
+
         // Count total rows
         $totalRows = 0;
         while (fgetcsv($handle) !== false) {
@@ -89,23 +97,29 @@ class ProcessParishLookup implements ShouldQueue
         $import->update(['records_total' => $totalRows]);
 
         $batch = [];
-        $batchSize = 100; // Reduced from 500 to avoid PostgreSQL parameter limit with upsert
+        $batchSize = 100;
         $processed = 0;
 
         while (($row = fgetcsv($handle)) !== false) {
             try {
                 $data = array_combine($header, $row);
 
+                $parCode = $data[$fields['par_code']] ?? null;
+                if (! $parCode) {
+                    $import->incrementFailed();
+                    continue;
+                }
+
                 $batch[] = [
-                    'par_code' => $data['PAR24CD'] ?? null,
-                    'par_name' => $data['PAR24NM'] ?? null,
-                    'par_name_welsh' => !empty($data['PAR24NMW']) ? $data['PAR24NMW'] : null,
-                    'wd_code' => $data['WD24CD'] ?? null,
-                    'wd_name' => $data['WD24NM'] ?? null,
-                    'wd_name_welsh' => !empty($data['WD24NMW']) ? $data['WD24NMW'] : null,
-                    'lad_code' => $data['LAD24CD'] ?? null,
-                    'lad_name' => $data['LAD24NM'] ?? null,
-                    'lad_name_welsh' => !empty($data['LAD24NMW']) ? $data['LAD24NMW'] : null,
+                    'par_code' => $parCode,
+                    'par_name' => $data[$fields['par_name']] ?? null,
+                    'par_name_welsh' => !empty($data[$fields['par_name_welsh']]) ? $data[$fields['par_name_welsh']] : null,
+                    'wd_code' => $data[$fields['wd_code']] ?? null,
+                    'wd_name' => $data[$fields['wd_name']] ?? null,
+                    'wd_name_welsh' => !empty($data[$fields['wd_name_welsh']]) ? $data[$fields['wd_name_welsh']] : null,
+                    'lad_code' => $data[$fields['lad_code']] ?? null,
+                    'lad_name' => $data[$fields['lad_name']] ?? null,
+                    'lad_name_welsh' => !empty($data[$fields['lad_name_welsh']]) ? $data[$fields['lad_name_welsh']] : null,
                     'version_date' => now()->toDateString(),
                     'source' => 'ons_lookup',
                     'created_at' => now(),
@@ -139,13 +153,54 @@ class ProcessParishLookup implements ShouldQueue
         fclose($handle);
     }
 
+    /**
+     * Discover field names dynamically from CSV header.
+     * ONS changes year codes (PAR24CD, PAR25CD, etc.) so we match by pattern.
+     */
+    private function discoverFields(array $header): array
+    {
+        $result = [
+            'par_code' => null, 'par_name' => null, 'par_name_welsh' => null,
+            'wd_code' => null, 'wd_name' => null, 'wd_name_welsh' => null,
+            'lad_code' => null, 'lad_name' => null, 'lad_name_welsh' => null,
+        ];
+
+        $patterns = [
+            'par_code' => '/^PAR\d{2}CD$/i',
+            'par_name' => '/^PAR\d{2}NM$/i',
+            'par_name_welsh' => '/^PAR\d{2}NMW$/i',
+            'wd_code' => '/^WD\d{2}CD$/i',
+            'wd_name' => '/^WD\d{2}NM$/i',
+            'wd_name_welsh' => '/^WD\d{2}NMW$/i',
+            'lad_code' => '/^LAD\d{2}CD$/i',
+            'lad_name' => '/^LAD\d{2}NM$/i',
+            'lad_name_welsh' => '/^LAD\d{2}NMW$/i',
+        ];
+
+        foreach ($header as $fieldName) {
+            foreach ($patterns as $key => $pattern) {
+                if (! $result[$key] && preg_match($pattern, $fieldName)) {
+                    $result[$key] = $fieldName;
+                }
+            }
+        }
+
+        return $result;
+    }
+
     private function insertBatch(array $batch): void
     {
+        // Filter out rows with null par_code before upsert
+        $batch = array_filter($batch, fn (array $row) => ! empty($row['par_code']));
+
+        if (empty($batch)) {
+            return;
+        }
+
         // Deduplicate batch based on unique constraint (par_code + wd_code + version_date)
-        // ONS CSV files contain duplicate rows that need to be filtered out
         $uniqueRows = [];
         foreach ($batch as $row) {
-            $key = $row['par_code'] . '|' . $row['wd_code'] . '|' . $row['version_date'];
+            $key = $row['par_code'] . '|' . ($row['wd_code'] ?? '') . '|' . $row['version_date'];
             $uniqueRows[$key] = $row;
         }
 
