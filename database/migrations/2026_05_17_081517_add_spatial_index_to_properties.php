@@ -12,7 +12,9 @@ return new class extends Migration
 
     public function up(): void
     {
-        $existing = DB::selectOne("SELECT 1 FROM pg_indexes WHERE indexname = 'idx_properties_geom'");
+        $existing = DB::selectOne(
+            "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_properties_geom'"
+        );
         if ($existing) {
             return;
         }
