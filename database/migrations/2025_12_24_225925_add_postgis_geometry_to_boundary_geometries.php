@@ -17,13 +17,18 @@ return new class extends Migration
             return;
         }
 
-        // Add PostGIS geometry column (keeping the JSONB for backwards compatibility)
-        DB::statement("ALTER TABLE boundary_geometries ADD COLUMN IF NOT EXISTS geom geometry(Geometry, 4326)");
+        // Check whether geom already exists (avoids ownership errors on shared hosting)
+        $columnExists = DB::selectOne(
+            "SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'boundary_geometries' AND column_name = 'geom'"
+        );
 
-        // Create spatial index for fast point-in-polygon queries
+        if (! $columnExists) {
+            DB::statement("ALTER TABLE boundary_geometries ADD COLUMN geom geometry(Geometry, 4326)");
+        }
+
         DB::statement("CREATE INDEX IF NOT EXISTS boundary_geometries_geom_idx ON boundary_geometries USING GIST (geom)");
 
-        // Populate geometry column from existing JSONB geometry data
         DB::statement("
             UPDATE boundary_geometries
             SET geom = ST_SetSRID(ST_GeomFromGeoJSON(geometry::text), 4326)
