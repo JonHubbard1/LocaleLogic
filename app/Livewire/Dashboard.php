@@ -573,6 +573,7 @@ class Dashboard extends Component
                 'dataset' => 'ONSUD',
                 'epoch' => 0,
                 'release_date' => now(),
+                'imported_at' => now(),
                 'status' => 'importing',
                 'progress_percentage' => 0,
                 'status_message' => 'Discovering latest release...',
