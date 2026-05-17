@@ -11,7 +11,7 @@ class ReconcileGeographyCodes extends Command
         {--table=properties : Table to reconcile (properties or properties_staging)}
         {--type= : Reconcile only one boundary type (wards, parishes, ced, constituencies, region, police_force_areas, lad)}
         {--dry-run : Preview corrections without writing to database}
-        {--batch-size=5000 : Batch size for progress updates}';
+        {--batch-size=50000 : Batch size for progress updates}';
 
     protected $description = 'Reconcile geography code columns using PostGIS spatial containment against boundary polygons';
 
@@ -33,6 +33,7 @@ class ReconcileGeographyCodes extends Command
         $table = $this->option('table');
         $dryRun = $this->option('dry-run');
         $filterType = $this->option('type');
+        $batchSize = (int) $this->option('batch-size');
 
         if (! in_array($table, ['properties', 'properties_staging'], true)) {
             $this->error("Invalid table: {$table}. Must be 'properties' or 'properties_staging'.");
@@ -132,28 +133,7 @@ class ReconcileGeographyCodes extends Command
                 $this->info("  {$mismatched} rows would be corrected (dry-run).");
                 $totalCorrected += $mismatched;
             } else {
-                $affected = DB::affectingStatement(
-                    "WITH matches AS (
-                        SELECT DISTINCT ON (p.uprn) p.uprn, bg.gss_code
-                        FROM {$table} p
-                        JOIN boundary_geometries bg
-                            ON bg.boundary_type = ?
-                            AND bg.geom IS NOT NULL
-                            AND ST_Intersects(
-                                ST_SetSRID(ST_MakePoint(p.lng, p.lat), 4326),
-                                bg.geom
-                            )
-                        WHERE p.lat IS NOT NULL
-                          AND p.lng IS NOT NULL
-                        ORDER BY p.uprn, ST_Area(bg.geom::geography) DESC
-                    )
-                    UPDATE {$table} p
-                    SET {$column} = m.gss_code
-                    FROM matches m
-                    WHERE p.uprn = m.uprn
-                      AND p.{$column} IS DISTINCT FROM m.gss_code",
-                    [$type]
-                );
+                $affected = $this->reconcileInChunks($table, $type, $column, $batchSize);
 
                 $elapsed = round(microtime(true) - $start, 1);
                 $this->info("  {$affected} rows corrected in {$elapsed}s");
@@ -171,5 +151,98 @@ class ReconcileGeographyCodes extends Command
         $this->info('========================================');
 
         return 0;
+    }
+
+    /**
+     * Reconcile a single boundary type in chunked transactions.
+     *
+     * Prevents a single 41 M-row UPDATE from monopolising the DB for hours.
+     *
+     * @param string $table       Target table (properties or properties_staging)
+     * @param string $type        boundary_type in boundary_geometries
+     * @param string $column      Column to update on the target table
+     * @param int    $chunkSize   UPRNs per chunk
+     */
+    private function reconcileInChunks(
+        string $table,
+        string $type,
+        string $column,
+        int $chunkSize = 50_000
+    ): int {
+        $totalAffected = 0;
+        $batchNumber   = 0;
+
+        $minUprn = DB::table($table)->whereNotNull('uprn')->min('uprn');
+        $maxUprn = DB::table($table)->whereNotNull('uprn')->max('uprn');
+
+        if ($minUprn === null || $maxUprn === null) {
+            $this->warn('  No UPRNs found in table, skipping.');
+
+            return 0;
+        }
+
+        // Build a temp table with the correct spatial assignments.
+        // This is still heavy, but it is a read-only query — no row locks.
+        $this->info('  Building match table (read-only spatial join)...');
+        DB::statement('DROP TABLE IF EXISTS _reconcile_matches');
+        DB::statement(
+            "CREATE TEMP TABLE _reconcile_matches AS
+            SELECT DISTINCT ON (p.uprn) p.uprn, bg.gss_code
+            FROM {$table} p
+            JOIN boundary_geometries bg
+                ON bg.boundary_type = ?
+                AND bg.geom IS NOT NULL
+                AND ST_Intersects(
+                    ST_SetSRID(ST_MakePoint(p.lng, p.lat), 4326),
+                    bg.geom
+                )
+            WHERE p.lat IS NOT NULL
+              AND p.lng IS NOT NULL
+            ORDER BY p.uprn, ST_Area(bg.geom::geography) DESC",
+            [$type]
+        );
+
+        DB::statement('CREATE INDEX _reconcile_matches_uprn ON _reconcile_matches(uprn)');
+
+        $matchCount = DB::table('_reconcile_matches')->count();
+        $this->info("  {$matchCount} matches found. Updating in chunks of {$chunkSize}...");
+
+        $currentMin = $minUprn;
+
+        while ($currentMin <= $maxUprn) {
+            $batchNumber++;
+            $currentMax = $currentMin + $chunkSize - 1;
+
+            $affected = DB::affectingStatement(
+                "UPDATE {$table} p
+                 SET {$column} = m.gss_code
+                 FROM _reconcile_matches m
+                 WHERE p.uprn = m.uprn
+                   AND p.uprn BETWEEN ? AND ?
+                   AND p.{$column} IS DISTINCT FROM m.gss_code",
+                [$currentMin, $currentMax]
+            );
+
+            $totalAffected += $affected;
+
+            if ($affected > 0 || $batchNumber % 10 === 0) {
+                $this->info(
+                    sprintf(
+                        '    batch %d (UPRN %s–%s): +%d corrected (total %s)',
+                        $batchNumber,
+                        number_format($currentMin),
+                        number_format($currentMax),
+                        $affected,
+                        number_format($totalAffected)
+                    )
+                );
+            }
+
+            $currentMin = $currentMax + 1;
+        }
+
+        DB::statement('DROP TABLE IF EXISTS _reconcile_matches');
+
+        return $totalAffected;
     }
 }
