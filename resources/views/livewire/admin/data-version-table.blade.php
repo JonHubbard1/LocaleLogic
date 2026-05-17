@@ -94,7 +94,7 @@
                                                     </flux:menu.item>
                                                 @endif
 
-                                                <flux:menu.item icon="information-circle">
+                                                <flux:menu.item icon="information-circle" wire:click="viewDetails({{ $version->id }})">
                                                     View Details
                                                 </flux:menu.item>
                                             </flux:menu>
@@ -122,6 +122,126 @@
         </flux:card>
     </div>
 
+    {{-- Version Details Modal --}}
+    <flux:modal wire:model="showDetailsModal" class="max-w-4xl">
+        @if($selectedVersion)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ $selectedVersion->dataset }} Epoch {{ $selectedVersion->epoch }}</flux:heading>
+                    <flux:subheading>
+                        Released {{ $selectedVersion->release_date->format('d M Y') }}
+                        &middot; Imported {{ $selectedVersion->imported_at?->diffForHumans() ?? 'never' }}
+                    </flux:subheading>
+                </div>
+
+                {{-- Status + progress --}}
+                <div class="flex items-center gap-3">
+                    @php
+                        $variant = match($selectedVersion->status) {
+                            'current' => 'success',
+                            'importing' => 'info',
+                            'failed' => 'danger',
+                            default => 'warning'
+                        };
+                    @endphp
+                    <flux:badge :variant="$variant" size="lg">{{ ucfirst($selectedVersion->status) }}</flux:badge>
+                    @if($selectedVersion->progress_percentage !== null)
+                        <div class="flex-1">
+                            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                                <div class="bg-blue-600 h-3 rounded-full transition-all"
+                                     style="width: {{ $selectedVersion->progress_percentage }}%"></div>
+                            </div>
+                        </div>
+                        <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                            {{ number_format((float) $selectedVersion->progress_percentage, 1) }}%
+                        </span>
+                    @endif
+                </div>
+
+                @if($selectedVersion->status_message)
+                    <div class="rounded-lg bg-gray-50 dark:bg-gray-800 p-3 text-sm text-gray-700 dark:text-gray-300">
+                        {{ $selectedVersion->status_message }}
+                    </div>
+                @endif
+
+                {{-- Summary grid --}}
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Records</p>
+                        <p class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            {{ number_format($selectedVersion->record_count ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Files</p>
+                        <p class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            {{ ($selectedVersion->current_file ?? 0) }} / {{ ($selectedVersion->total_files ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Successful</p>
+                        <p class="text-xl font-semibold text-green-600 dark:text-green-400">
+                            {{ number_format($selectedVersion->stats['successful'] ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Errors</p>
+                        <p class="text-xl font-semibold text-red-600 dark:text-red-400">
+                            {{ number_format(($selectedVersion->stats['errors'] ?? 0) + ($selectedVersion->stats['coordinate_errors'] ?? 0)) }}
+                        </p>
+                    </div>
+                </div>
+
+                {{-- File list --}}
+                @if($selectedVersion->files && count($selectedVersion->files) > 0)
+                    <div>
+                        <flux:heading size="sm" class="mb-2">Source Files</flux:heading>
+                        <div class="max-h-64 overflow-y-auto space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                            @foreach($selectedVersion->files as $fileInfo)
+                                <div class="flex items-center justify-between gap-3 text-sm p-2 rounded {{ ($fileInfo['status'] ?? '') === 'completed' ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800' }}">
+                                    <span class="font-mono text-gray-900 dark:text-gray-100 truncate">{{ $fileInfo['name'] ?? '—' }}</span>
+                                    <span class="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                        @if(isset($fileInfo['processed']))
+                                            {{ number_format($fileInfo['processed']) }} processed
+                                        @endif
+                                        @if(isset($fileInfo['status']))
+                                            &middot; {{ ucfirst($fileInfo['status']) }}
+                                        @endif
+                                    </span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Metadata --}}
+                <div class="grid gap-3 sm:grid-cols-2 text-sm">
+                    @if($selectedVersion->file_hash)
+                        <div>
+                            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">File Hash</p>
+                            <p class="font-mono text-xs text-gray-700 dark:text-gray-300 break-all">{{ $selectedVersion->file_hash }}</p>
+                        </div>
+                    @endif
+                    @if($selectedVersion->log_file)
+                        <div>
+                            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Log File</p>
+                            <p class="font-mono text-xs text-gray-700 dark:text-gray-300 break-all">{{ $selectedVersion->log_file }}</p>
+                        </div>
+                    @endif
+                    @if($selectedVersion->notes)
+                        <div class="sm:col-span-2">
+                            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Notes</p>
+                            <p class="text-gray-700 dark:text-gray-300">{{ $selectedVersion->notes }}</p>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="flex justify-end">
+                    <flux:button variant="ghost" wire:click="$set('showDetailsModal', false)">Close</flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 </div>
 
 <script>

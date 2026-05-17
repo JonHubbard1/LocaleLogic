@@ -5,32 +5,27 @@
         <flux:card>
             <div class="mb-6 flex items-center justify-between">
                 <div>
-                    <flux:heading>Boundary & Lookup Imports</flux:heading>
-                    <flux:subheading>View and manage all geography data versions</flux:subheading>
+                    <flux:heading>ONS Geography Imports</flux:heading>
+                    <flux:subheading>LAD, ward, parish, CED, constituency, region, and PFA name lookups</flux:subheading>
                 </div>
-                <flux:button href="{{ route('admin.boundaries') }}" icon="arrow-up-tray">
-                    Import Boundaries
+                <flux:button href="{{ route('admin.boundaries') }}" icon="map">
+                    Boundary Imports
                 </flux:button>
             </div>
 
-            <div class="mb-6 flex items-center gap-4">
-                <flux:select wire:model.live="typeFilter" placeholder="Filter by type">
-                    <option value="all">All Types</option>
-                    <option value="lad">Local Authority</option>
-                    <option value="ward">Ward</option>
-                    <option value="parish">Parish</option>
-                    <option value="constituency">Constituency</option>
-                    <option value="county">County</option>
-                    <option value="ced">County Electoral Division</option>
-                    <option value="region">Region</option>
-                    <option value="pfa">Police Force Area</option>
-                </flux:select>
-
+            <div class="mb-6 flex flex-wrap items-center gap-4">
                 <flux:select wire:model.live="statusFilter" placeholder="Filter by status">
                     <option value="all">All Statuses</option>
                     <option value="current">Current</option>
                     <option value="archived">Archived</option>
                     <option value="importing">Importing</option>
+                </flux:select>
+
+                <flux:select wire:model.live="typeFilter" placeholder="Filter by type">
+                    <option value="all">All Types</option>
+                    @foreach($types as $type)
+                        <option value="{{ $type }}">{{ ucfirst($type) }}</option>
+                    @endforeach
                 </flux:select>
             </div>
 
@@ -46,7 +41,7 @@
                                     @endif
                                 </th>
                                 <th wire:click="sortByField('year_code')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                    Year Code
+                                    Year
                                     @if($sortBy === 'year_code')
                                         <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
                                     @endif
@@ -57,7 +52,13 @@
                                         <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
                                     @endif
                                 </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Records</th>
+                                <th wire:click="sortByField('record_count')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Records
+                                    @if($sortBy === 'record_count')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Source File</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
                                 <th wire:click="sortByField('imported_at')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                     Imported
@@ -65,30 +66,31 @@
                                         <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
                                     @endif
                                 </th>
-                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
                             @foreach($versions as $version)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <tr wire:key="geo-version-{{ $version->id }}" class="hover:bg-gray-50 dark:hover:bg-gray-800">
                                     <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                                         {{ ucfirst($version->geography_type) }}
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                        {{ $version->year_code }}
+                                        20{{ $version->year_code }}
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                        {{ $version->release_date?->format('d M Y') ?? '—' }}
+                                        {{ $version->release_date->format('d M Y') }}
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                         {{ number_format($version->record_count ?? 0) }}
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-mono text-xs text-gray-500 dark:text-gray-400">
+                                        {{ $version->source_file ?? '—' }}
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm">
                                         @php
                                             $variant = match($version->status) {
                                                 'current' => 'success',
                                                 'importing' => 'info',
-                                                'failed' => 'danger',
                                                 default => 'warning'
                                             };
                                         @endphp
@@ -96,25 +98,6 @@
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                         {{ $version->imported_at?->diffForHumans() ?? '—' }}
-                                    </td>
-                                    <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                        <flux:dropdown align="end">
-                                            <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
-
-                                            <flux:menu>
-                                                @if($version->status === 'current')
-                                                    <flux:menu.item icon="archive-box" wire:click="archiveVersion({{ $version->id }})">
-                                                        Archive
-                                                    </flux:menu.item>
-                                                @endif
-
-                                                @if($version->status !== 'current')
-                                                    <flux:menu.item icon="trash" variant="danger" wire:click="deleteVersion({{ $version->id }})" wire:confirm="Are you sure you want to delete this version?">
-                                                        Delete
-                                                    </flux:menu.item>
-                                                @endif
-                                            </flux:menu>
-                                        </flux:dropdown>
                                     </td>
                                 </tr>
                             @endforeach
@@ -127,27 +110,11 @@
                 </div>
             @else
                 <div class="py-12 text-center">
-                    <flux:icon.inbox class="mx-auto h-12 w-12 text-gray-400" />
+                    <flux:icon.map class="mx-auto h-12 w-12 text-gray-400" />
                     <flux:heading size="lg" class="mt-2">No geography versions found</flux:heading>
-                    <flux:subheading>Import boundary or lookup data to get started</flux:subheading>
-                    <flux:button href="{{ route('admin.boundaries') }}" class="mt-4">
-                        Import Now
-                    </flux:button>
+                    <flux:subheading>Import ONS geography lookup tables (LAD, wards, parishes, etc.) to populate this list.</flux:subheading>
                 </div>
             @endif
         </flux:card>
     </div>
-
 </div>
-
-<script>
-    document.addEventListener('livewire:initialized', () => {
-        Livewire.on('version-archived', () => {
-            alert('Version archived successfully');
-        });
-
-        Livewire.on('version-deleted', () => {
-            alert('Version deleted successfully');
-        });
-    });
-</script>

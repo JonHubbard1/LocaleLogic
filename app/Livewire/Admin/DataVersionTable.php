@@ -17,10 +17,18 @@ class DataVersionTable extends Component
     public string $statusFilter = 'all';
     public string $sortBy = 'epoch';
     public string $sortDirection = 'desc';
+    public ?DataVersion $selectedVersion = null;
+    public bool $showDetailsModal = false;
 
     public function updatedStatusFilter()
     {
         $this->resetPage();
+    }
+
+    public function viewDetails(int $id): void
+    {
+        $this->selectedVersion = DataVersion::findOrFail($id);
+        $this->showDetailsModal = true;
     }
 
     public function sortByField($field)

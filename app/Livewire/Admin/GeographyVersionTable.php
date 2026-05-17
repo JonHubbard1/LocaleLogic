@@ -14,22 +14,22 @@ class GeographyVersionTable extends Component
 {
     use WithPagination;
 
-    public string $typeFilter = 'all';
     public string $statusFilter = 'all';
+    public string $typeFilter = 'all';
     public string $sortBy = 'imported_at';
     public string $sortDirection = 'desc';
 
-    public function updatedTypeFilter()
+    public function updatedStatusFilter(): void
     {
         $this->resetPage();
     }
 
-    public function updatedStatusFilter()
+    public function updatedTypeFilter(): void
     {
         $this->resetPage();
     }
 
-    public function sortByField($field)
+    public function sortByField(string $field): void
     {
         if ($this->sortBy === $field) {
             $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
@@ -39,36 +39,30 @@ class GeographyVersionTable extends Component
         }
     }
 
-    public function archiveVersion($id)
-    {
-        $version = GeographyVersion::findOrFail($id);
-        $version->update(['status' => 'archived']);
-        $this->dispatch('version-archived');
-    }
-
-    public function deleteVersion($id)
-    {
-        GeographyVersion::findOrFail($id)->delete();
-        $this->dispatch('version-deleted');
-    }
-
     public function render()
     {
         $query = GeographyVersion::query();
-
-        if ($this->typeFilter !== 'all') {
-            $query->where('geography_type', $this->typeFilter);
-        }
 
         if ($this->statusFilter !== 'all') {
             $query->where('status', $this->statusFilter);
         }
 
+        if ($this->typeFilter !== 'all') {
+            $query->where('geography_type', $this->typeFilter);
+        }
+
         $versions = $query->orderBy($this->sortBy, $this->sortDirection)
-            ->paginate(10);
+            ->paginate(15);
+
+        $types = GeographyVersion::query()
+            ->select('geography_type')
+            ->distinct()
+            ->orderBy('geography_type')
+            ->pluck('geography_type');
 
         return view('livewire.admin.geography-version-table', [
             'versions' => $versions,
+            'types' => $types,
         ]);
     }
 }

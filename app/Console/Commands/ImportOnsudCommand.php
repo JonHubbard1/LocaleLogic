@@ -22,6 +22,7 @@ class ImportOnsudCommand extends Command
         {--batch-size=1000 : Number of records per batch}
         {--log-file= : Path to log file for progress tracking}
         {--skip-download : Skip download step and use existing file}
+        {--skip-import : Skip truncate/import/lookups and resume from reconcile using existing staging data (requires --data-version-id)}
         {--skip-indexes : Skip index creation after table swap}
         {--skip-swap : Import to staging only without swapping}
         {--force : Force import even if validation fails}
@@ -75,6 +76,58 @@ class ImportOnsudCommand extends Command
             $dataVersionId = $this->option('data-version-id');
             if ($dataVersionId) {
                 $this->dataVersion = DataVersion::find($dataVersionId);
+            }
+
+            // --skip-import: bypass truncate/import/lookups and resume from reconcile
+            if ($this->option('skip-import')) {
+                if (! $dataVersionId) {
+                    $this->error('--skip-import requires --data-version-id');
+                    return 1;
+                }
+                if (! $this->dataVersion) {
+                    $this->error("DataVersion {$dataVersionId} not found.");
+                    return 1;
+                }
+
+                $stagingCount = DB::table('properties_staging')->count();
+                if ($stagingCount === 0) {
+                    $this->error('properties_staging is empty — cannot skip import.');
+                    return 1;
+                }
+
+                $this->stats['successful'] = $stagingCount;
+                $this->info("Resuming from reconcile with {$stagingCount} existing staging rows.");
+
+                // Reset the remaining steps so the dashboard shows them as active/pending again
+                $this->updateStep('reconcile', 'pending', 0, null);
+                $this->updateStep('validate', 'pending', 0, null);
+                $this->updateStep('swap', 'pending', 0, null);
+                $this->updateStep('index', 'pending', 0, null);
+                $this->dataVersion->update(['status' => 'importing']);
+
+                $this->reconcileGeographyCodes();
+                $this->displayStatistics();
+                $this->updateStats();
+
+                $this->updateStep('validate', 'active', 0, 'Validating staging table...');
+                $this->info('Validating staging table before swap...');
+                $validation = $this->tableSwapService->validateStagingTable($stagingCount);
+                if (! $validation['valid']) {
+                    throw new \RuntimeException($validation['message']);
+                }
+                $this->updateStep('validate', 'completed', 100, 'Validation passed: ' . number_format($validation['record_count']) . ' records');
+
+                $this->updateStep('swap', 'active', 0, 'Swapping production table...');
+                $this->performTableSwap($stagingCount);
+                $this->updateStep('swap', 'completed', 100, 'Table swap successful');
+
+                $this->updateStep('index', 'active', 0, 'Creating indexes...');
+                $this->createIndexes();
+                $this->updateStep('index', 'completed', 100, 'Indexes created');
+
+                $this->updateDataVersionStatus('current', 'Import completed successfully');
+                $this->info('ONSUD import completed successfully!');
+                return 0;
             }
 
             if ($autoDiscover) {
@@ -1007,6 +1060,20 @@ class ImportOnsudCommand extends Command
         if ($hasIndex) {
             $this->info('  Spatial index already exists.');
             return;
+        }
+
+        // CREATE INDEX requires table ownership in PostgreSQL; check before attempting.
+        $isOwner = DB::selectOne(
+            "SELECT 1 FROM pg_tables WHERE tablename = 'properties_staging' AND tableowner = current_user"
+        );
+
+        if (! $isOwner) {
+            $dbUser = config('database.connections.pgsql.username');
+            throw new \RuntimeException(
+                "Cannot create spatial index on properties_staging: the current database user does not own the table.\n" .
+                "Fix this by running the following as a PostgreSQL superuser:\n" .
+                "  ALTER TABLE properties_staging OWNER TO {$dbUser};"
+            );
         }
 
         $original = DB::selectOne("SHOW maintenance_work_mem")->maintenance_work_mem;
