@@ -8,14 +8,16 @@ use Illuminate\Support\Facades\Log;
 class LlmDiscoveryService
 {
     private string $baseUrl;
-    private string $apiKey;
+    private ?string $apiKey;
     private string $model;
+    private string $driver;
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.llm.base_url', 'https://api.openai.com/v1'), '/');
-        $this->apiKey = config('services.llm.api_key');
-        $this->model = config('services.llm.model', 'gpt-4o-mini');
+        $this->baseUrl = rtrim(config('services.llm.base_url', 'http://localhost:11434'), '/');
+        $this->apiKey = config('services.llm.api_key') ?: null;
+        $this->model = config('services.llm.model', 'minimax-m2.7:cloud');
+        $this->driver = config('services.llm.driver', 'ollama');
     }
 
     /**
@@ -26,7 +28,7 @@ class LlmDiscoveryService
      */
     public function discoverForCouncils(array $councils): array
     {
-        if (empty($this->apiKey)) {
+        if ($this->driver === 'openai' && empty($this->apiKey)) {
             throw new \RuntimeException('LLM API key not configured. Set LLM_API_KEY in .env');
         }
 
@@ -34,9 +36,9 @@ class LlmDiscoveryService
         $councilList = implode("\n", array_map(fn ($n) => "- {$n}", $councilNames));
 
         $systemPrompt = <<<PROMPT
-You are a UK local government expert. Your task is to identify which councils use the ModernGov democracy system and provide their exact base URLs.
+You are a UK local government expert. Identify which councils use the ModernGov democracy system.
 
-ModernGov URLs follow these patterns (most to least common):
+Known URL patterns (most common first):
 1. {slug}.moderngov.co.uk
 2. democracy.{slug}.gov.uk
 3. committees.{slug}.gov.uk
@@ -49,33 +51,21 @@ ModernGov URLs follow these patterns (most to least common):
 10. democratic.{slug}.gov.uk
 11. present.{slug}.gov.uk
 
-Return ONLY a raw JSON array. No markdown, no explanations, no prose.
-Each object must have keys: "name" (exact full official name), "url" (the ModernGov base URL, e.g. https://lbbd.moderngov.co.uk), "region" (one of: London, South, East, Midlands, North, Yorkshire, Scotland, Wales, Northern Ireland).
-
-If a council does NOT use ModernGov, omit it from the array entirely.
-If you are uncertain about a URL, include it anyway — wrong URLs can be corrected later.
+Output rules:
+- Return ONLY a JSON array. No markdown, no explanations.
+- Each object: {"name":"Council Name","url":"https://...","region":"London"}
+- Omit councils that do NOT use ModernGov.
+- If uncertain about a URL, include it anyway.
 PROMPT;
 
-        $userPrompt = "For each of the following UK councils, determine if they use ModernGov and provide the exact base URL.\n\n{$councilList}\n\nReturn only the JSON array.";
+        $userPrompt = "Which of these councils use ModernGov? Provide exact base URLs.\n\n{$councilList}\n\nReturn only the JSON array.";
 
         try {
-            $response = Http::timeout(120)
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $this->apiKey,
-                    'Content-Type' => 'application/json',
-                ])
-                ->post($this->baseUrl . '/chat/completions', [
-                    'model' => $this->model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $userPrompt],
-                    ],
-                    'temperature' => 0.1,
-                    'max_tokens' => 4000,
-                ]);
+            $response = $this->sendRequest($systemPrompt, $userPrompt);
 
             if (! $response->successful()) {
                 Log::error('LLM discovery API error', [
+                    'driver' => $this->driver,
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
@@ -83,15 +73,78 @@ PROMPT;
                 return [];
             }
 
-            $json = $response->json();
-            $rawContent = $json['choices'][0]['message']['content'] ?? '';
+            $rawContent = $this->extractContent($response->json());
 
             return $this->parseJsonResponse($rawContent);
         } catch (\Throwable $e) {
-            Log::error('LLM discovery exception', ['error' => $e->getMessage()]);
+            Log::error('LLM discovery exception', [
+                'driver' => $this->driver,
+                'error' => $e->getMessage(),
+            ]);
 
             return [];
         }
+    }
+
+    /**
+     * Send the request using the appropriate driver format.
+     */
+    private function sendRequest(string $systemPrompt, string $userPrompt): \Illuminate\Http\Client\Response
+    {
+        $headers = [
+            'Content-Type' => 'application/json',
+        ];
+
+        if ($this->apiKey) {
+            $headers['Authorization'] = 'Bearer ' . $this->apiKey;
+        }
+
+        if ($this->driver === 'ollama') {
+            return Http::timeout(180)
+                ->withHeaders($headers)
+                ->post($this->baseUrl . '/api/chat', [
+                    'model' => $this->model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt],
+                    ],
+                    'stream' => false,
+                    'options' => [
+                        'temperature' => 0.1,
+                    ],
+                ]);
+        }
+
+        // OpenAI-compatible format
+        return Http::timeout(120)
+            ->withHeaders($headers)
+            ->post($this->baseUrl . '/chat/completions', [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt],
+                ],
+                'temperature' => 0.1,
+                'max_tokens' => 4000,
+            ]);
+    }
+
+    /**
+     * Extract the assistant's content from the response body.
+     */
+    private function extractContent(?array $json): string
+    {
+        if (empty($json)) {
+            return '';
+        }
+
+        // Ollama format: { message: { content: "..." } }
+        if (isset($json['message']['content'])) {
+            return $json['message']['content'];
+        }
+
+        // OpenAI format: { choices: [ { message: { content: "..." } } ] }
+        return $json['choices'][0]['message']['content'] ?? '';
     }
 
     /**
@@ -113,6 +166,13 @@ PROMPT;
         }
 
         $cleaned = trim($cleaned);
+
+        // Some models wrap the whole response in brackets with extra text — try to isolate JSON
+        if (! str_starts_with($cleaned, '[')) {
+            if (preg_match('/(\[.*\])/s', $cleaned, $matches)) {
+                $cleaned = $matches[1];
+            }
+        }
 
         try {
             $decoded = json_decode($cleaned, true, 512, JSON_THROW_ON_ERROR);

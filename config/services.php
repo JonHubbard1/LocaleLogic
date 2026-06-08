@@ -38,8 +38,9 @@ return [
 
     'llm' => [
         'api_key' => env('LLM_API_KEY'),
-        'base_url' => env('LLM_BASE_URL', 'https://api.openai.com/v1'),
-        'model' => env('LLM_MODEL', 'gpt-4o-mini'),
+        'base_url' => env('LLM_BASE_URL', 'http://localhost:11434'),
+        'model' => env('LLM_MODEL', 'minimax-m2.7:cloud'),
+        'driver' => env('LLM_DRIVER', 'ollama'), // 'ollama' or 'openai'
     ],
 
 ];

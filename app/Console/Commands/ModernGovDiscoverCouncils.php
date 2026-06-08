@@ -16,7 +16,7 @@ class ModernGovDiscoverCouncils extends Command
      * @var string
      */
     protected $signature = 'moderngov:discover-councils
-                            {--batch=50 : Number of councils per LLM batch}
+                            {--batch=20 : Number of councils per LLM batch}
                             {--nation= : Discover only a specific nation (england,scotland,wales,northern_ireland)}
                             {--dry-run : Preview results without saving}
                             {--no-check : Skip automatic health check after import}';
