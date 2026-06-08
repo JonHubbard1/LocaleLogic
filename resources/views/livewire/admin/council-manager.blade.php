@@ -221,22 +221,22 @@
                 <div class="grid gap-4 sm:grid-cols-2">
                     <flux:field>
                         <flux:label>Website URL</flux:label>
-                        <flux:input wire:model="editingCouncil.website_url" />
+                        <flux:input wire:model="editWebsiteUrl" />
                     </flux:field>
 
                     <flux:field>
                         <flux:label>Democracy URL</flux:label>
-                        <flux:input wire:model="editingCouncil.democracy_url" />
+                        <flux:input wire:model="editDemocracyUrl" />
                     </flux:field>
 
                     <flux:field>
                         <flux:label>ModernGov Base URL</flux:label>
-                        <flux:input wire:model="editingCouncil.modern_gov_base_url" />
+                        <flux:input wire:model="editModernGovBaseUrl" />
                     </flux:field>
 
                     <flux:field>
                         <flux:label>ModernGov Status</flux:label>
-                        <flux:select wire:model="editingCouncil.uses_modern_gov">
+                        <flux:select wire:model="editUsesModernGov">
                             <option value="">Unknown</option>
                             <option value="1">Yes</option>
                             <option value="0">No</option>
@@ -245,12 +245,12 @@
 
                     <flux:field>
                         <flux:label>Democracy Club Org ID</flux:label>
-                        <flux:input wire:model="editingCouncil.democracy_club_org_id" />
+                        <flux:input wire:model="editDemocracyClubOrgId" />
                     </flux:field>
 
                     <flux:field>
                         <flux:label>Democracy Club Status</flux:label>
-                        <flux:select wire:model="editingCouncil.uses_democracy_club">
+                        <flux:select wire:model="editUsesDemocracyClub">
                             <option value="">Unknown</option>
                             <option value="1">Yes</option>
                             <option value="0">No</option>

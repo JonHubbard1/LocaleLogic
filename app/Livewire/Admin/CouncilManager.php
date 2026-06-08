@@ -26,6 +26,14 @@ class CouncilManager extends Component
     public ?Council $editingCouncil = null;
     public bool $showEditModal = false;
 
+    // Edit form fields (kept separate from the model to avoid hydration issues)
+    public string $editWebsiteUrl = '';
+    public string $editDemocracyUrl = '';
+    public string $editModernGovBaseUrl = '';
+    public string $editUsesModernGov = '';
+    public string $editDemocracyClubOrgId = '';
+    public string $editUsesDemocracyClub = '';
+
     public ?Council $viewingCouncil = null;
     public bool $showViewModal = false;
 
@@ -85,16 +93,22 @@ class CouncilManager extends Component
 
     public function editCouncil(string $gssCode): void
     {
-        $this->editingCouncil = Council::findOrFail($gssCode);
+        $council = Council::findOrFail($gssCode);
+        $this->editingCouncil = $council;
 
-        // Cast booleans to strings so <select> options match
-        $this->editingCouncil->uses_modern_gov = match ($this->editingCouncil->uses_modern_gov) {
+        // Populate separate form properties so we never mutate the Eloquent model
+        $this->editWebsiteUrl = $council->website_url ?? '';
+        $this->editDemocracyUrl = $council->democracy_url ?? '';
+        $this->editModernGovBaseUrl = $council->modern_gov_base_url ?? '';
+        $this->editDemocracyClubOrgId = $council->democracy_club_org_id ?? '';
+
+        $this->editUsesModernGov = match ($council->uses_modern_gov) {
             true => '1',
             false => '0',
             null => '',
             default => '',
         };
-        $this->editingCouncil->uses_democracy_club = match ($this->editingCouncil->uses_democracy_club) {
+        $this->editUsesDemocracyClub = match ($council->uses_democracy_club) {
             true => '1',
             false => '0',
             null => '',
@@ -110,27 +124,39 @@ class CouncilManager extends Component
             return;
         }
 
-        // Convert string values back to booleans before saving
-        $this->editingCouncil->uses_modern_gov = match ($this->editingCouncil->uses_modern_gov) {
-            '1' => true,
-            '0' => false,
-            default => null,
-        };
-        $this->editingCouncil->uses_democracy_club = match ($this->editingCouncil->uses_democracy_club) {
-            '1' => true,
-            '0' => false,
-            default => null,
-        };
+        $council = Council::findOrFail($this->editingCouncil->gss_code);
 
-        $this->editingCouncil->save();
+        $council->update([
+            'website_url' => $this->editWebsiteUrl ?: null,
+            'democracy_url' => $this->editDemocracyUrl ?: null,
+            'modern_gov_base_url' => $this->editModernGovBaseUrl ?: null,
+            'democracy_club_org_id' => $this->editDemocracyClubOrgId ?: null,
+            'uses_modern_gov' => match ($this->editUsesModernGov) {
+                '1' => true,
+                '0' => false,
+                default => null,
+            },
+            'uses_democracy_club' => match ($this->editUsesDemocracyClub) {
+                '1' => true,
+                '0' => false,
+                default => null,
+            },
+        ]);
+
         $this->showEditModal = false;
-        $this->dispatch('toast', message: $this->editingCouncil->name . ' updated.');
+        $this->dispatch('toast', message: $council->name . ' updated.');
     }
 
     public function cancelEdit(): void
     {
         $this->showEditModal = false;
         $this->editingCouncil = null;
+        $this->editWebsiteUrl = '';
+        $this->editDemocracyUrl = '';
+        $this->editModernGovBaseUrl = '';
+        $this->editUsesModernGov = '';
+        $this->editDemocracyClubOrgId = '';
+        $this->editUsesDemocracyClub = '';
     }
 
     public function viewCouncil(string $gssCode): void
