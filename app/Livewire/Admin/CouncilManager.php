@@ -161,6 +161,21 @@ class CouncilManager extends Component
         $this->dispatch('toast', message: $council->name . ' — Democracy Club discovery queued. Refresh in a moment to see results.');
     }
 
+    public function syncModernGovCouncillors(string $gssCode): void
+    {
+        $council = Council::findOrFail($gssCode);
+
+        if (! $council->uses_modern_gov || ! $council->modern_gov_base_url) {
+            $this->dispatch('toast', message: $council->name . ' is not connected to ModernGov.');
+
+            return;
+        }
+
+        \App\Jobs\ImportCouncillorJob::dispatch($gssCode);
+
+        $this->dispatch('toast', message: $council->name . ' — Councillor import queued. Refresh in a moment to see updated counts.');
+    }
+
     public function getNationOptions(): array
     {
         return [

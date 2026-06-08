@@ -124,6 +124,18 @@
                                         @endphp
                                         <div class="flex items-center gap-2">
                                             <flux:badge :variant="$mgovVariant" size="sm">{{ $mgovLabel }}</flux:badge>
+                                            @if($council->uses_modern_gov && $council->modern_gov_base_url)
+                                                <flux:button
+                                                    size="xs"
+                                                    variant="ghost"
+                                                    wire:click="syncModernGovCouncillors('{{ $council->gss_code }}')"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="syncModernGovCouncillors('{{ $council->gss_code }}')"
+                                                    title="Sync councillors from ModernGov"
+                                                >
+                                                    <flux:icon.arrow-path class="h-3 w-3" wire:loading.class="animate-spin" wire:target="syncModernGovCouncillors('{{ $council->gss_code }}')" />
+                                                </flux:button>
+                                            @endif
                                             <flux:button size="xs" variant="ghost" wire:click="toggleModernGov('{{ $council->gss_code }}')" title="Toggle ModernGov">
                                                 <flux:icon.arrow-path class="h-3 w-3" />
                                             </flux:button>
