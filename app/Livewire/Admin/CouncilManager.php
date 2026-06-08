@@ -40,6 +40,31 @@ class CouncilManager extends Component
     public string $councillorSortBy = 'name';
     public string $councillorSortDirection = 'asc';
 
+    /**
+     * Get queue status for display.
+     *
+     * @return array{pending:int,failed:int,discoveryStatus:string,discoveryMessage:string}
+     */
+    public function getQueueStatus(): array
+    {
+        $pending = \Illuminate\Support\Facades\DB::table('jobs')->count();
+        $failed = \Illuminate\Support\Facades\DB::table('failed_jobs')->count();
+        $discovery = Cache::get('moderngov_discovery_status');
+
+        return [
+            'pending' => $pending,
+            'failed' => $failed,
+            'discovery_status' => $discovery['status'] ?? 'idle',
+            'discovery_message' => match ($discovery['status'] ?? 'idle') {
+                'running' => 'AI discovery in progress...',
+                'completed' => 'AI discovery completed. ' . ($discovery['summary'] ?? ''),
+                'failed' => 'AI discovery failed. ' . ($discovery['error'] ?? ''),
+                default => '',
+            },
+            'discovery_time' => $discovery['started_at'] ?? $discovery['finished_at'] ?? null,
+        ];
+    }
+
     public function mount(): void
     {
         $this->search = request()->query('search', '');

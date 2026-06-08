@@ -2,6 +2,33 @@
     <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
         <flux:heading size="xl" class="mb-6">Council Manager</flux:heading>
 
+        @php
+            $queueStatus = $this->getQueueStatus();
+        @endphp
+
+        @if($queueStatus['pending'] > 0 || $queueStatus['failed'] > 0 || $queueStatus['discovery_status'] !== 'idle')
+            <div wire:poll.5s class="mb-4 flex flex-wrap items-center gap-3">
+                @if($queueStatus['discovery_status'] === 'running')
+                    <flux:badge variant="warning" size="sm">
+                        <flux:icon.arrow-path class="inline h-3 w-3 animate-spin" />
+                        {{ $queueStatus['discovery_message'] }}
+                    </flux:badge>
+                @elseif($queueStatus['discovery_status'] === 'completed')
+                    <flux:badge variant="success" size="sm">{{ $queueStatus['discovery_message'] }}</flux:badge>
+                @elseif($queueStatus['discovery_status'] === 'failed')
+                    <flux:badge variant="danger" size="sm">{{ $queueStatus['discovery_message'] }}</flux:badge>
+                @endif
+
+                @if($queueStatus['pending'] > 0)
+                    <flux:badge variant="info" size="sm">{{ $queueStatus['pending'] }} job(s) queued</flux:badge>
+                @endif
+
+                @if($queueStatus['failed'] > 0)
+                    <flux:badge variant="danger" size="sm">{{ $queueStatus['failed'] }} failed job(s)</flux:badge>
+                @endif
+            </div>
+        @endif
+
         <flux:card>
             <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>

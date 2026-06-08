@@ -70,6 +70,8 @@
         {{ $slot }}
     </flux:main>
 
+    <flux:toast position="top-right" />
+
     @fluxScripts
     <script>
         document.addEventListener('livewire:initialized', () => {
@@ -83,6 +85,14 @@
                 }).then(() => {
                     window.location.href = '{{ route("login") }}';
                 });
+            });
+
+            Livewire.on('toast', (event) => {
+                if (typeof Flux !== 'undefined' && Flux.toast) {
+                    Flux.toast(event.message);
+                } else {
+                    console.log('[Toast]', event.message);
+                }
             });
         });
     </script>
