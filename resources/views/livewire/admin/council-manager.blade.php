@@ -279,6 +279,23 @@
                 </div>
 
                 @if($viewingCouncil->councillors->count() > 0)
+                    @php
+                        $partyCounts = $viewingCouncil->councillors
+                            ->groupBy(fn($c) => $c->party ?: 'Independent')
+                            ->map(fn($group) => $group->count())
+                            ->sortDesc();
+                    @endphp
+                    <div class="flex flex-wrap gap-3">
+                        @foreach($partyCounts as $party => $count)
+                            <flux:card class="flex items-center gap-3 px-4 py-2">
+                                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-sm font-bold">
+                                    {{ $count }}
+                                </div>
+                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $party }}</span>
+                            </flux:card>
+                        @endforeach
+                    </div>
+
                     <div class="overflow-x-auto">
                         <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead>
