@@ -391,10 +391,19 @@ class CouncilDiscoveryService
     private function slugify(string $name): string
     {
         $name = strtolower($name);
+        // Strip common administrative words
         $name = preg_replace('/\bcouncil\b/', '', $name);
         $name = preg_replace('/\bcity of\b/', '', $name);
         $name = preg_replace('/\blondon borough of\b/', '', $name);
         $name = preg_replace('/\broyal borough of\b/', '', $name);
+        $name = preg_replace('/\bborough of\b/', '', $name);
+        $name = preg_replace('/\bdistrict\b/', '', $name);
+        $name = preg_replace('/\bcounty\b/', '', $name);
+        $name = preg_replace('/\bmetropolitan\b/', '', $name);
+        $name = preg_replace('/\bunitary\b/', '', $name);
+        $name = preg_replace('/\bthe\b/', '', $name);
+        $name = preg_replace('/\band\b/', '', $name);
+        $name = preg_replace('/\bof\b/', '', $name);
         $name = preg_replace('/[^a-z0-9\s-]/', '', $name);
         $name = preg_replace('/\s+/', '-', trim($name));
 
