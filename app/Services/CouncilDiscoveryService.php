@@ -231,6 +231,9 @@ class CouncilDiscoveryService
                     'mgcalendar',
                     'mgplanshome',
                     'mgfindmember',
+                    'modgov specifics',
+                    'mg.jqueryaddons',
+                    'ssmgstyles.css',
                 ];
                 foreach ($signatures as $sig) {
                     if (str_contains($body, $sig)) {
@@ -275,6 +278,7 @@ class CouncilDiscoveryService
         // Common abbreviations — match on short name or full name
         $abbreviations = [
             'barking and dagenham' => ['lbbd'],
+            'basildon' => ['basildon'],
             'barnet' => ['barnet'],
             'bexley' => ['bexley'],
             'brent' => ['brent'],
@@ -368,6 +372,15 @@ class CouncilDiscoveryService
         $candidates[] = "https://democracy.{$slug}.gov.uk";
         $candidates[] = "https://{$slug}.gov.uk";
         $candidates[] = "https://www.{$slug}.gov.uk";
+
+        // Additional TLDs and patterns some councils use
+        $candidates[] = "https://{$slug}.moderngov.co.uk";
+        $candidates[] = "https://{$slug}meetings.info";
+        $candidates[] = "https://www.{$slug}meetings.info";
+        $candidates[] = "https://{$slug}.info";
+        $candidates[] = "https://www.{$slug}.info";
+        $candidates[] = "https://{$slug}meetings.org.uk";
+        $candidates[] = "https://{$slug}meetings.com";
 
         return array_unique($candidates);
     }

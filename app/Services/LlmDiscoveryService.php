@@ -50,6 +50,12 @@ Known URL patterns (most common first):
 9. cmis.{slug}.gov.uk
 10. democratic.{slug}.gov.uk
 11. present.{slug}.gov.uk
+12. {slug}meetings.info
+13. {slug}meetings.org.uk
+14. {slug}meetings.com
+15. {slug}.info
+
+Councils may also use custom domains not matching these patterns.
 
 Output rules:
 - Return ONLY a JSON array. No markdown, no explanations.
