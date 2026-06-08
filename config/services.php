@@ -36,4 +36,10 @@ return [
         'base_url' => env('DEMOCRACY_CLUB_BASE_URL', 'https://candidates.democracyclub.org.uk/api/v0.9'),
     ],
 
+    'llm' => [
+        'api_key' => env('LLM_API_KEY'),
+        'base_url' => env('LLM_BASE_URL', 'https://api.openai.com/v1'),
+        'model' => env('LLM_MODEL', 'gpt-4o-mini'),
+    ],
+
 ];

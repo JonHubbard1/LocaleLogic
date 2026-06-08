@@ -9,6 +9,9 @@
                     <flux:subheading>Manage councils and ModernGov status</flux:subheading>
                 </div>
                 <div class="flex items-center gap-2">
+                    <flux:button size="sm" variant="primary" icon="sparkles" wire:click="aiDiscoverModernGov()">
+                        AI Discover
+                    </flux:button>
                     <flux:badge variant="info">{{ $councils->total() }} councils</flux:badge>
                 </div>
             </div>
@@ -186,6 +189,10 @@
 
                                                 <flux:menu.item icon="magnifying-glass" wire:click="searchDemocracyClub('{{ $council->gss_code }}')">
                                                     Search for Democracy Club
+                                                </flux:menu.item>
+
+                                                <flux:menu.item icon="sparkles" wire:click="aiDiscoverModernGov('{{ $council->gss_code }}')">
+                                                    AI Discover ModernGov
                                                 </flux:menu.item>
                                             </flux:menu>
                                         </flux:dropdown>

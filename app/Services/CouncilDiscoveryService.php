@@ -191,7 +191,7 @@ class CouncilDiscoveryService
      * Tries the WSDL first, then falls back to the member index page
      * and looks for ModernGov-specific signatures.
      */
-    private function verifyModernGovUrl(string $url): bool
+    public function verifyModernGovUrl(string $url): bool
     {
         $base = rtrim($url, '/');
 

@@ -204,6 +204,23 @@ class CouncilManager extends Component
         $this->dispatch('toast', message: $council->name . ' — Democracy Club discovery queued. Refresh in a moment to see results.');
     }
 
+    public function aiDiscoverModernGov(?string $gssCode = null): void
+    {
+        if ($gssCode) {
+            $council = Council::findOrFail($gssCode);
+            \App\Jobs\DiscoverModernGovCouncilsJob::dispatch(
+                nation: $council->nation,
+                noCheck: false,
+            );
+
+            $this->dispatch('toast', message: $council->name . ' — AI ModernGov discovery queued for all ' . ucfirst($council->nation) . ' councils.');
+        } else {
+            \App\Jobs\DiscoverModernGovCouncilsJob::dispatch();
+
+            $this->dispatch('toast', message: 'AI ModernGov discovery queued for all UK councils.');
+        }
+    }
+
     public function syncModernGovCouncillors(string $gssCode): void
     {
         $council = Council::findOrFail($gssCode);
