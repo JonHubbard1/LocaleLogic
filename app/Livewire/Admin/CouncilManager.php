@@ -40,6 +40,9 @@ class CouncilManager extends Component
     public string $councillorSortBy = 'name';
     public string $councillorSortDirection = 'asc';
 
+    public bool $showJobsModal = false;
+    public bool $showFailedJobsModal = false;
+
     /**
      * Get queue status for display.
      *
@@ -63,6 +66,112 @@ class CouncilManager extends Component
             },
             'discovery_time' => $discovery['started_at'] ?? $discovery['finished_at'] ?? null,
         ];
+    }
+
+    /**
+     * Get pending jobs with decoded details.
+     *
+     * @return array<array{id:int,class:string,description:string,created_at:string}>
+     */
+    public function getPendingJobs(): array
+    {
+        return \Illuminate\Support\Facades\DB::table('jobs')
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get(['id', 'queue', 'payload', 'created_at'])
+            ->map(function ($job) {
+                $payload = json_decode($job->payload, true);
+
+                return [
+                    'id' => $job->id,
+                    'class' => $payload['displayName'] ?? 'Unknown',
+                    'description' => $this->extractJobDescription($payload),
+                    'queue' => $job->queue,
+                    'created_at' => $job->created_at,
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * Get failed jobs with decoded details.
+     *
+     * @return array<array{id:int,class:string,exception:string,failed_at:string}>
+     */
+    public function getFailedJobs(): array
+    {
+        return \Illuminate\Support\Facades\DB::table('failed_jobs')
+            ->orderBy('failed_at', 'desc')
+            ->limit(50)
+            ->get(['id', 'connection', 'queue', 'payload', 'exception', 'failed_at'])
+            ->map(function ($job) {
+                $payload = json_decode($job->payload, true);
+
+                return [
+                    'id' => $job->id,
+                    'class' => $payload['displayName'] ?? 'Unknown',
+                    'description' => $this->extractJobDescription($payload),
+                    'exception' => $job->exception,
+                    'failed_at' => $job->failed_at,
+                ];
+            })
+            ->toArray();
+    }
+
+    private function extractJobDescription(array $payload): string
+    {
+        $command = $payload['data']['command'] ?? null;
+        if (! $command) {
+            return '';
+        }
+
+        $decoded = @unserialize($command);
+        if (! is_object($decoded)) {
+            return '';
+        }
+
+        // Try to extract meaningful properties from common jobs
+        $props = [];
+        if (property_exists($decoded, 'councilGssCode')) {
+            $props[] = 'GSS: ' . $decoded->councilGssCode;
+        }
+        if (property_exists($decoded, 'gssCode')) {
+            $props[] = 'GSS: ' . $decoded->gssCode;
+        }
+        if (property_exists($decoded, 'nation')) {
+            $props[] = 'Nation: ' . ($decoded->nation ?: 'All');
+        }
+        if (property_exists($decoded, 'region')) {
+            $props[] = 'Region: ' . ($decoded->region ?: 'All');
+        }
+
+        return implode(' · ', $props);
+    }
+
+    public function openJobsModal(): void
+    {
+        $this->showJobsModal = true;
+    }
+
+    public function closeJobsModal(): void
+    {
+        $this->showJobsModal = false;
+    }
+
+    public function openFailedJobsModal(): void
+    {
+        $this->showFailedJobsModal = true;
+    }
+
+    public function closeFailedJobsModal(): void
+    {
+        $this->showFailedJobsModal = false;
+    }
+
+    public function retryFailedJobs(): void
+    {
+        \Illuminate\Support\Facades\Artisan::call('queue:retry', ['id' => 'all']);
+        $this->dispatch('toast', message: 'Failed jobs requeued.');
     }
 
     public function mount(): void

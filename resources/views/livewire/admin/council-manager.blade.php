@@ -20,11 +20,17 @@
                 @endif
 
                 @if($queueStatus['pending'] > 0)
-                    <flux:badge variant="info" size="sm">{{ $queueStatus['pending'] }} job(s) queued</flux:badge>
+                    <button wire:click="openJobsModal" class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800">
+                        {{ $queueStatus['pending'] }} job(s) queued
+                        <flux:icon.eye class="inline h-3 w-3" />
+                    </button>
                 @endif
 
                 @if($queueStatus['failed'] > 0)
-                    <flux:badge variant="danger" size="sm">{{ $queueStatus['failed'] }} failed job(s)</flux:badge>
+                    <button wire:click="openFailedJobsModal" class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800">
+                        {{ $queueStatus['failed'] }} failed job(s)
+                        <flux:icon.eye class="inline h-3 w-3" />
+                    </button>
                 @endif
             </div>
         @endif
@@ -436,5 +442,114 @@
                 @endif
             </div>
         @endif
+    </flux:modal>
+
+    {{-- Pending Jobs Modal --}}
+    <flux:modal wire:model="showJobsModal" class="max-w-4xl">
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <flux:heading size="lg">Queue Jobs</flux:heading>
+                <flux:button variant="ghost" size="sm" wire:click="closeJobsModal">Close</flux:button>
+            </div>
+
+            @php
+                $pendingJobs = $this->getPendingJobs();
+            @endphp
+
+            @if(count($pendingJobs) > 0)
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Job</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Details</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queue</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queued</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                            @foreach($pendingJobs as $job)
+                                <tr wire:key="job-{{ $job['id'] }}">
+                                    <td class="px-3 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ class_basename($job['class']) }}
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ $job['description'] ?: '—' }}
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                        <flux:badge size="sm" variant="secondary">{{ $job['queue'] }}</flux:badge>
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                        {{ \Carbon\Carbon::parse($job['created_at'])->diffForHumans() }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="py-8 text-center">
+                    <flux:icon.inbox class="mx-auto h-10 w-10 text-gray-400" />
+                    <flux:subheading class="mt-2">No pending jobs.</flux:subheading>
+                </div>
+            @endif
+        </div>
+    </flux:modal>
+
+    {{-- Failed Jobs Modal --}}
+    <flux:modal wire:model="showFailedJobsModal" class="max-w-4xl">
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <flux:heading size="lg">Failed Jobs</flux:heading>
+                <div class="flex items-center gap-2">
+                    @if(count($this->getFailedJobs()) > 0)
+                        <flux:button size="sm" variant="primary" wire:click="retryFailedJobs">Retry All</flux:button>
+                    @endif
+                    <flux:button variant="ghost" size="sm" wire:click="closeFailedJobsModal">Close</flux:button>
+                </div>
+            </div>
+
+            @php
+                $failedJobs = $this->getFailedJobs();
+            @endphp
+
+            @if(count($failedJobs) > 0)
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Job</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Details</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Error</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Failed</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                            @foreach($failedJobs as $job)
+                                <tr wire:key="failed-job-{{ $job['id'] }}">
+                                    <td class="px-3 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ class_basename($job['class']) }}
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ $job['description'] ?: '—' }}
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-red-600 dark:text-red-400 max-w-xs truncate">
+                                        {{ \Illuminate\Support\Str::limit($job['exception'], 120) }}
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                        {{ \Carbon\Carbon::parse($job['failed_at'])->diffForHumans() }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="py-8 text-center">
+                    <flux:icon.inbox class="mx-auto h-10 w-10 text-gray-400" />
+                    <flux:subheading class="mt-2">No failed jobs.</flux:subheading>
+                </div>
+            @endif
+        </div>
     </flux:modal>
 </div>
