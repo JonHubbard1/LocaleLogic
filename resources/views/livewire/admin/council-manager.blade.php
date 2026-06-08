@@ -136,9 +136,6 @@
                                                     <flux:icon.arrow-path class="h-3 w-3" wire:loading.class="animate-spin" wire:target="syncModernGovCouncillors('{{ $council->gss_code }}')" />
                                                 </flux:button>
                                             @endif
-                                            <flux:button size="xs" variant="ghost" wire:click="toggleModernGov('{{ $council->gss_code }}')" title="Toggle ModernGov">
-                                                <flux:icon.arrow-path class="h-3 w-3" />
-                                            </flux:button>
                                         </div>
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-sm">
