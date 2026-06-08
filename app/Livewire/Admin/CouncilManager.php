@@ -174,6 +174,15 @@ class CouncilManager extends Component
         $this->dispatch('toast', message: 'Failed jobs requeued.');
     }
 
+    public function cancelJob(int $jobId): void
+    {
+        \Illuminate\Support\Facades\DB::table('jobs')
+            ->where('id', $jobId)
+            ->delete();
+
+        $this->dispatch('toast', message: 'Job cancelled.');
+    }
+
     public function mount(): void
     {
         $this->search = request()->query('search', '');

@@ -465,6 +465,7 @@
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Details</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queue</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queued</th>
+                                <th class="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -481,6 +482,11 @@
                                     </td>
                                     <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                         {{ \Carbon\Carbon::parse($job['created_at'])->diffForHumans() }}
+                                    </td>
+                                    <td class="px-3 py-2 text-right">
+                                        <flux:button size="xs" variant="danger" wire:click="cancelJob({{ $job['id'] }})" title="Cancel job">
+                                            <flux:icon.x-mark class="h-3 w-3" />
+                                        </flux:button>
                                     </td>
                                 </tr>
                             @endforeach
