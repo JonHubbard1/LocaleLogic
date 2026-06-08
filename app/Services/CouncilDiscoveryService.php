@@ -80,7 +80,8 @@ class CouncilDiscoveryService
     private function scrapeWebsiteForModernGov(string $websiteUrl): ?array
     {
         try {
-            $response = Http::timeout(10)
+            $response = Http::timeout(5)
+                ->connectTimeout(3)
                 ->withOptions(['verify' => false])
                 ->get($websiteUrl);
 
@@ -187,22 +188,58 @@ class CouncilDiscoveryService
 
     /**
      * Verify that a URL hosts a ModernGov installation.
+     * Tries the WSDL first, then falls back to the member index page
+     * and looks for ModernGov-specific signatures.
      */
     private function verifyModernGovUrl(string $url): bool
     {
+        $base = rtrim($url, '/');
+
+        // Try the WSDL endpoint first
         try {
-            $response = Http::timeout(10)
+            $response = Http::timeout(5)
+                ->connectTimeout(3)
                 ->withOptions(['verify' => false])
-                ->get(rtrim($url, '/') . '/mgWebService.asmx?WSDL');
+                ->get($base . '/mgWebService.asmx?WSDL');
 
             if ($response->successful()) {
                 $body = strtolower($response->body());
-                return str_contains($body, 'wsdl:definitions')
+                if (str_contains($body, 'wsdl:definitions')
                     || str_contains($body, 'mgwebservice')
-                    || str_contains($body, 'targetnamespace');
+                    || str_contains($body, 'targetnamespace')) {
+                    return true;
+                }
             }
         } catch (\Throwable $e) {
-            Log::debug('ModernGov verification failed', ['url' => $url, 'error' => $e->getMessage()]);
+            Log::debug('ModernGov WSDL probe failed', ['url' => $url, 'error' => $e->getMessage()]);
+        }
+
+        // Fall back to the member index page and look for signatures
+        try {
+            $response = Http::timeout(5)
+                ->connectTimeout(3)
+                ->withOptions(['verify' => false])
+                ->get($base . '/mgMemberIndex.aspx');
+
+            if ($response->successful()) {
+                $body = strtolower($response->body());
+                $signatures = [
+                    '$moderngov',
+                    'mgmemberindex',
+                    'modern.gov reverse cms',
+                    'mgmemberindex.aspx',
+                    'mgcalendar',
+                    'mgplanshome',
+                    'mgfindmember',
+                ];
+                foreach ($signatures as $sig) {
+                    if (str_contains($body, $sig)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::debug('ModernGov member-index probe failed', ['url' => $url, 'error' => $e->getMessage()]);
         }
 
         return false;
@@ -235,41 +272,40 @@ class CouncilDiscoveryService
         $slugs = [];
         $name = strtolower($council->name);
 
-        // Common abbreviations
+        // Common abbreviations — match on short name or full name
         $abbreviations = [
-            'london borough of barking and dagenham' => ['lbbd'],
-            'london borough of barnet' => ['barnet'],
-            'london borough of bexley' => ['bexley'],
-            'london borough of brent' => ['brent'],
-            'london borough of bromley' => ['bromley'],
-            'london borough of camden' => ['camden'],
-            'london borough of croydon' => ['croydon'],
-            'london borough of ealing' => ['ealing'],
-            'london borough of enfield' => ['enfield'],
-            'london borough of greenwich' => ['greenwich'],
-            'london borough of hackney' => ['hackney'],
-            'london borough of hammersmith and fulham' => ['lbhf'],
-            'london borough of haringey' => ['haringey'],
-            'london borough of harrow' => ['harrow'],
-            'london borough of havering' => ['havering'],
-            'london borough of hillingdon' => ['hillingdon'],
-            'london borough of hounslow' => ['hounslow'],
-            'london borough of islington' => ['islington'],
-            'london borough of kensington and chelsea' => ['rbkc'],
-            'royal borough of kensington and chelsea' => ['rbkc'],
-            'london borough of kingston upon thames' => ['kingston'],
-            'london borough of lambeth' => ['lambeth'],
-            'london borough of lewisham' => ['lewisham'],
-            'london borough of merton' => ['merton'],
-            'london borough of newham' => ['newham'],
-            'london borough of redbridge' => ['redbridge'],
-            'london borough of richmond upon thames' => ['richmond'],
-            'london borough of southwark' => ['southwark'],
-            'london borough of sutton' => ['sutton'],
-            'london borough of tower hamlets' => ['towerhamlets'],
-            'london borough of waltham forest' => ['walthamforest'],
-            'london borough of wandsworth' => ['wandsworth'],
-            'city of westminster' => ['westminster'],
+            'barking and dagenham' => ['lbbd'],
+            'barnet' => ['barnet'],
+            'bexley' => ['bexley'],
+            'brent' => ['brent'],
+            'bromley' => ['bromley'],
+            'camden' => ['camden'],
+            'croydon' => ['croydon'],
+            'ealing' => ['ealing'],
+            'enfield' => ['enfield'],
+            'greenwich' => ['greenwich'],
+            'hackney' => ['hackney'],
+            'hammersmith and fulham' => ['lbhf'],
+            'haringey' => ['haringey'],
+            'harrow' => ['harrow'],
+            'havering' => ['havering'],
+            'hillingdon' => ['hillingdon'],
+            'hounslow' => ['hounslow'],
+            'islington' => ['islington'],
+            'kensington and chelsea' => ['rbkc'],
+            'kingston upon thames' => ['kingston'],
+            'lambeth' => ['lambeth'],
+            'lewisham' => ['lewisham'],
+            'merton' => ['merton'],
+            'newham' => ['newham'],
+            'redbridge' => ['redbridge'],
+            'richmond upon thames' => ['richmond'],
+            'southwark' => ['southwark'],
+            'sutton' => ['sutton'],
+            'tower hamlets' => ['towerhamlets'],
+            'waltham forest' => ['walthamforest'],
+            'wandsworth' => ['wandsworth'],
+            'westminster' => ['westminster'],
             'city of london' => ['cityoflondon'],
         ];
 
