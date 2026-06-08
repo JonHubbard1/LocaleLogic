@@ -25,6 +25,12 @@ class Kernel extends ConsoleKernel
             ->mondays()
             ->at('09:00')
             ->timezone('Europe/London');
+
+        // ModernGov councillor import: daily for councils that have it (catches byelections/defections)
+        $schedule->command('councillors:import --batch=20')
+            ->dailyAt('04:00')
+            ->timezone('Europe/London')
+            ->withoutOverlapping();
     }
 
     /**

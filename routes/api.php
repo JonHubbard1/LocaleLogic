@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CouncilController;
+use App\Http\Controllers\Api\V1\CouncillorController;
 use App\Http\Controllers\Api\V1\PostcodeController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,4 +40,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Generic boundary postcodes endpoint (supports any boundary type)
     Route::get('boundaries/{boundaryType}/{gssCode}/postcodes', [CouncilController::class, 'boundaryPostcodesSpatial']);
+
+    // Councillor Endpoints
+    Route::get('councils/all', [CouncillorController::class, 'councils']);
+    Route::get('councils/all/{gssCode}', [CouncillorController::class, 'showCouncil']);
+    Route::get('councils/all/{gssCode}/councillors', [CouncillorController::class, 'councillorsByCouncil']);
+    Route::get('wards/{wardCode}/councillors', [CouncillorController::class, 'councillorsByWard']);
 });

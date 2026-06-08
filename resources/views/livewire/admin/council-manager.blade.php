@@ -1,0 +1,340 @@
+<div class="py-12">
+    <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+        <flux:heading size="xl" class="mb-6">Council Manager</flux:heading>
+
+        <flux:card>
+            <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <flux:heading>UK Local Authorities</flux:heading>
+                    <flux:subheading>Manage councils and ModernGov status</flux:subheading>
+                </div>
+                <div class="flex items-center gap-2">
+                    <flux:badge variant="info">{{ $councils->total() }} councils</flux:badge>
+                </div>
+            </div>
+
+            <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <flux:input wire:model.live="search" placeholder="Search by name or GSS code..." icon="magnifying-glass" />
+
+                <flux:select wire:model.live="nationFilter">
+                    @foreach($nationOptions as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </flux:select>
+
+                <flux:select wire:model.live="typeFilter">
+                    @foreach($typeOptions as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </flux:select>
+
+                <flux:select wire:model.live="modernGovFilter">
+                    @foreach($modernGovOptions as $value => $label)
+                        <option value="{{ $value }}">ModernGov: {{ $label }}</option>
+                    @endforeach
+                </flux:select>
+
+                <flux:select wire:model.live="democracyClubFilter">
+                    @foreach($democracyClubOptions as $value => $label)
+                        <option value="{{ $value }}">Democracy Club: {{ $label }}</option>
+                    @endforeach
+                </flux:select>
+            </div>
+
+            @if($councils->count() > 0)
+                <div class="overflow-x-auto">
+                    <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead>
+                            <tr class="bg-gray-50 dark:bg-gray-800">
+                                <th wire:click="sortByField('name')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Name
+                                    @if($sortBy === 'name')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('gss_code')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    GSS Code
+                                    @if($sortBy === 'gss_code')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('council_type')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Type
+                                    @if($sortBy === 'council_type')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('nation')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Nation
+                                    @if($sortBy === 'nation')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('uses_modern_gov')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    ModernGov
+                                    @if($sortBy === 'uses_modern_gov')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('uses_democracy_club')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Dem. Club
+                                    @if($sortBy === 'uses_democracy_club')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th wire:click="sortByField('councillor_count')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    Councillors
+                                    @if($sortBy === 'councillor_count')
+                                        <flux:icon.chevron-{{ $sortDirection === 'asc' ? 'up' : 'down' }} class="inline h-4 w-4" />
+                                    @endif
+                                </th>
+                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
+                            @foreach($councils as $council)
+                                <tr wire:key="council-{{ $council->gss_code }}" class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ $council->name }}
+                                        @if($council->name_welsh)
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $council->name_welsh }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm font-mono text-gray-500 dark:text-gray-400">
+                                        {{ $council->gss_code }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                        <flux:badge size="sm" variant="secondary">{{ str_replace('_', ' ', $council->council_type) }}</flux:badge>
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ ucfirst($council->nation) }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                        @php
+                                            $mgovVariant = match($council->uses_modern_gov) {
+                                                true => 'success',
+                                                false => 'danger',
+                                                default => 'warning',
+                                            };
+                                            $mgovLabel = match($council->uses_modern_gov) {
+                                                true => 'Yes',
+                                                false => 'No',
+                                                default => 'Unknown',
+                                            };
+                                        @endphp
+                                        <div class="flex items-center gap-2">
+                                            <flux:badge :variant="$mgovVariant" size="sm">{{ $mgovLabel }}</flux:badge>
+                                            <flux:button size="xs" variant="ghost" wire:click="toggleModernGov('{{ $council->gss_code }}')" title="Toggle ModernGov">
+                                                <flux:icon.arrow-path class="h-3 w-3" />
+                                            </flux:button>
+                                        </div>
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                        @php
+                                            $dcVariant = match($council->uses_democracy_club) {
+                                                true => 'success',
+                                                false => 'danger',
+                                                default => 'warning',
+                                            };
+                                            $dcLabel = match($council->uses_democracy_club) {
+                                                true => 'Yes',
+                                                false => 'No',
+                                                default => 'Unknown',
+                                            };
+                                        @endphp
+                                        <flux:badge :variant="$dcVariant" size="sm">{{ $dcLabel }}</flux:badge>
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ $council->councillor_count ?? 0 }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                        <flux:dropdown align="end">
+                                            <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
+
+                                            <flux:menu>
+                                                <flux:menu.item icon="pencil-square" wire:click="editCouncil('{{ $council->gss_code }}')">
+                                                    Edit
+                                                </flux:menu.item>
+                                                <flux:menu.item icon="users" wire:click="viewCouncil('{{ $council->gss_code }}')">
+                                                    View Councillors
+                                                </flux:menu.item>
+                                                @if($council->modern_gov_base_url)
+                                                    <flux:menu.item icon="globe-alt" href="{{ $council->modern_gov_base_url }}" target="_blank">
+                                                        ModernGov Site
+                                                    </flux:menu.item>
+                                                @endif
+                                                @if($council->democracy_url)
+                                                    <flux:menu.item icon="globe-alt" href="{{ $council->democracy_url }}" target="_blank">
+                                                        Democracy Site
+                                                    </flux:menu.item>
+                                                @endif
+
+                                                <flux:menu.separator />
+
+                                                <flux:menu.item icon="magnifying-glass" wire:click="searchModernGov('{{ $council->gss_code }}')">
+                                                    Search for ModernGov
+                                                </flux:menu.item>
+
+                                                <flux:menu.item icon="magnifying-glass" wire:click="searchDemocracyClub('{{ $council->gss_code }}')">
+                                                    Search for Democracy Club
+                                                </flux:menu.item>
+                                            </flux:menu>
+                                        </flux:dropdown>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-6">
+                    {{ $councils->links() }}
+                </div>
+            @else
+                <div class="py-12 text-center">
+                    <flux:icon.inbox class="mx-auto h-12 w-12 text-gray-400" />
+                    <flux:heading size="lg" class="mt-2">No councils found</flux:heading>
+                    <flux:subheading>Try adjusting your filters or run `php artisan councils:seed`</flux:subheading>
+                </div>
+            @endif
+        </flux:card>
+    </div>
+
+    {{-- Edit Modal --}}
+    <flux:modal wire:model="showEditModal" class="max-w-2xl">
+        @if($editingCouncil)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">Edit {{ $editingCouncil->name }}</flux:heading>
+                    <flux:subheading>{{ $editingCouncil->gss_code }} · {{ str_replace('_', ' ', $editingCouncil->council_type) }}</flux:subheading>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <flux:field>
+                        <flux:label>Website URL</flux:label>
+                        <flux:input wire:model="editingCouncil.website_url" />
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>Democracy URL</flux:label>
+                        <flux:input wire:model="editingCouncil.democracy_url" />
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>ModernGov Base URL</flux:label>
+                        <flux:input wire:model="editingCouncil.modern_gov_base_url" />
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>ModernGov Status</flux:label>
+                        <flux:select wire:model="editingCouncil.uses_modern_gov">
+                            <option value="">Unknown</option>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
+                        </flux:select>
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>Democracy Club Org ID</flux:label>
+                        <flux:input wire:model="editingCouncil.democracy_club_org_id" />
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>Democracy Club Status</flux:label>
+                        <flux:select wire:model="editingCouncil.uses_democracy_club">
+                            <option value="">Unknown</option>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
+                        </flux:select>
+                    </flux:field>
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <flux:button variant="ghost" wire:click="cancelEdit">Cancel</flux:button>
+                    <flux:button variant="primary" wire:click="saveCouncil">Save</flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
+
+    {{-- View Councillors Modal --}}
+    <flux:modal wire:model="showViewModal" class="max-w-5xl">
+        @if($viewingCouncil)
+            <div class="space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <flux:heading size="lg">{{ $viewingCouncil->name }} — Councillors</flux:heading>
+                        <flux:subheading>{{ $viewingCouncil->councillors->count() }} councillor(s) on record</flux:subheading>
+                    </div>
+                    <flux:button variant="ghost" wire:click="closeView">Close</flux:button>
+                </div>
+
+                @if($viewingCouncil->councillors->count() > 0)
+                    <div class="overflow-x-auto">
+                        <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead>
+                                <tr class="bg-gray-50 dark:bg-gray-800">
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Name</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Party</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Ward</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Phone</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Source</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
+                                @foreach($viewingCouncil->councillors->sortBy('name') as $councillor)
+                                    <tr wire:key="councillor-{{ $councillor->id }}">
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                            <div class="flex items-center gap-3">
+                                                @if($councillor->photo_url)
+                                                    <img src="{{ $councillor->photo_url }}" alt="" class="h-10 w-10 rounded-full object-cover" />
+                                                @else
+                                                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700">
+                                                        <flux:icon.user class="h-5 w-5 text-gray-500" />
+                                                    </div>
+                                                @endif
+                                                <div>
+                                                    {{ $councillor->name }}
+                                                    @if($councillor->profile_url)
+                                                        <a href="{{ $councillor->profile_url }}" target="_blank" class="ml-1 text-blue-600 hover:underline"><flux:icon.arrow-top-right-on-square class="inline h-3 w-3" /></a>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ $councillor->party ?? '—' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ $councillor->wardName() ?? $councillor->ward_gss_code }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            @if($councillor->email)
+                                                <a href="mailto:{{ $councillor->email }}" class="text-blue-600 hover:underline">{{ $councillor->email }}</a>
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ $councillor->phone ?? '—' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm">
+                                            <flux:badge size="sm" variant="{{ $councillor->source === 'democracy_club' ? 'success' : 'secondary' }}">
+                                                {{ $councillor->source }}
+                                            </flux:badge>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div class="py-8 text-center">
+                        <flux:icon.inbox class="mx-auto h-10 w-10 text-gray-400" />
+                        <flux:subheading class="mt-2">No councillors on record for this council yet.</flux:subheading>
+                    </div>
+                @endif
+            </div>
+        @endif
+    </flux:modal>
+</div>

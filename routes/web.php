@@ -9,6 +9,7 @@ use App\Livewire\Admin\DataVersionTable;
 use App\Livewire\Admin\GeographyVersionTable;
 use App\Livewire\Admin\ImportManager;
 use App\Livewire\Admin\ImportProgress;
+use App\Livewire\Admin\CouncilManager;
 use App\Livewire\Admin\TableViewer;
 use App\Livewire\Admin\UserManager;
 use App\Livewire\Auth\Login;
@@ -41,7 +42,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/', Dashboard::class)->name('dashboard');
 
     // Admin routes
-    Route::prefix('admin')->name('admin.')->group(function () {
+    Route::prefix('admin')->name('admin.')->middleware(['no.cache.headers'])->group(function () {
         Route::get('/import', ImportManager::class)->name('import');
         Route::get('/import/progress/{import}', ImportProgress::class)->name('import.progress');
         Route::get('/boundaries', BoundaryImport::class)->name('boundaries');
@@ -52,6 +53,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/users', UserManager::class)->name('users');
         Route::get('/api-tokens', ApiTokenManager::class)->name('api-tokens');
         Route::get('/tables', TableViewer::class)->name('tables');
+        Route::get('/councils', CouncilManager::class)->name('councils');
     });
 
     // Tools routes
