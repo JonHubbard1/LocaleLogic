@@ -446,7 +446,7 @@
 
     {{-- Pending Jobs Modal --}}
     <flux:modal wire:model="showJobsModal" class="max-w-4xl">
-        <div class="space-y-4">
+        <div wire:poll.3s class="space-y-4">
             <div class="flex items-center justify-between">
                 <flux:heading size="lg">Queue Jobs</flux:heading>
                 <flux:button variant="ghost" size="sm" wire:click="closeJobsModal">Close</flux:button>
@@ -454,6 +454,7 @@
 
             @php
                 $pendingJobs = $this->getPendingJobs();
+                $discoveryProgress = \Illuminate\Support\Facades\Cache::get('moderngov_discovery_progress');
             @endphp
 
             @if(count($pendingJobs) > 0)
@@ -463,13 +464,17 @@
                             <tr>
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Job</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Details</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queue</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Progress</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Queued</th>
                                 <th class="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                             @foreach($pendingJobs as $job)
+                                <@php
+                                    $isDiscovery = str_contains($job['class'], 'DiscoverModernGovCouncilsJob');
+                                    $progress = $isDiscovery ? $discoveryProgress : null;
+                                @endphp
                                 <tr wire:key="job-{{ $job['id'] }}">
                                     <td class="px-3 py-2 text-sm font-medium text-gray-900 dark:text-white">
                                         {{ class_basename($job['class']) }}
@@ -477,8 +482,27 @@
                                     <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
                                         {{ $job['description'] ?: '—' }}
                                     </td>
-                                    <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                        <flux:badge size="sm" variant="secondary">{{ $job['queue'] }}</flux:badge>
+                                    <td class="px-3 py-2 text-sm">
+                                        @if($isDiscovery && $progress && $progress['status'] === 'running')
+                                            <div class="space-y-1">
+                                                <div class="flex items-center gap-2">
+                                                    <flux:icon.arrow-path class="h-3 w-3 animate-spin text-blue-500" />
+                                                    <span class="text-xs text-gray-600 dark:text-gray-300">
+                                                        Batch {{ $progress['current_batch'] }}/{{ $progress['total_batches'] }}
+                                                    </span>
+                                                </div>
+                                                <div class="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                                                    <div class="h-1.5 rounded-full bg-blue-500 transition-all" style="width: {{ ($progress['current_batch'] / max($progress['total_batches'], 1)) * 100 }}%"></div>
+                                                </div>
+                                                <span class="text-xs text-gray-500">
+                                                    {{ $progress['total_discovered'] }} discovered · {{ $progress['total_updated'] }} updated
+                                                </span>
+                                            </div>
+                                        @elseif($isDiscovery && $progress)
+                                            <span class="text-xs text-gray-500">{{ $progress['status'] }}</span>
+                                        @else
+                                            <span class="text-xs text-gray-400">Waiting...</span>
+                                        @endif
                                     </td>
                                     <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                         {{ \Carbon\Carbon::parse($job['created_at'])->diffForHumans() }}

@@ -62,9 +62,22 @@ class ModernGovDiscoverCouncils extends Command
         $totalDiscovered = 0;
         $totalUpdated = 0;
         $chunks = $councils->chunk($batchSize);
+        $totalChunks = $chunks->count();
 
         foreach ($chunks as $chunkIndex => $chunk) {
-            $this->info("Batch " . ($chunkIndex + 1) . "/{$chunks->count()} — sending " . $chunk->count() . ' councils to LLM...');
+            $currentBatch = $chunkIndex + 1;
+            $this->info("Batch {$currentBatch}/{$totalChunks} — sending " . $chunk->count() . ' councils to LLM...');
+
+            // Write progress to cache so the UI can poll it
+            \Illuminate\Support\Facades\Cache::put('moderngov_discovery_progress', [
+                'status' => 'running',
+                'current_batch' => $currentBatch,
+                'total_batches' => $totalChunks,
+                'councils_in_batch' => $chunk->count(),
+                'total_discovered' => $totalDiscovered,
+                'total_updated' => $totalUpdated,
+                'updated_at' => now()->toIso8601String(),
+            ], 600);
 
             $batchCouncils = $chunk->map(fn ($c) => ['name' => $c->name, 'gss_code' => $c->gss_code])->toArray();
 
@@ -133,6 +146,9 @@ class ModernGovDiscoverCouncils extends Command
 
         $this->newLine();
         $this->info("Done. Discovered: {$totalDiscovered}, Updated: {$totalUpdated}");
+
+        // Clear progress cache when finished
+        \Illuminate\Support\Facades\Cache::forget('moderngov_discovery_progress');
 
         if (! $dryRun && ! $noCheck && $totalUpdated > 0) {
             $this->newLine();
