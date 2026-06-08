@@ -37,6 +37,9 @@ class CouncilManager extends Component
     public ?Council $viewingCouncil = null;
     public bool $showViewModal = false;
 
+    public string $councillorSortBy = 'name';
+    public string $councillorSortDirection = 'asc';
+
     public function mount(): void
     {
         $this->search = request()->query('search', '');
@@ -161,7 +164,9 @@ class CouncilManager extends Component
 
     public function viewCouncil(string $gssCode): void
     {
-        $this->viewingCouncil = Council::findOrFail($gssCode);
+        $this->viewingCouncil = Council::with('councillors')->findOrFail($gssCode);
+        $this->councillorSortBy = 'name';
+        $this->councillorSortDirection = 'asc';
         $this->showViewModal = true;
     }
 
@@ -169,6 +174,18 @@ class CouncilManager extends Component
     {
         $this->showViewModal = false;
         $this->viewingCouncil = null;
+        $this->councillorSortBy = 'name';
+        $this->councillorSortDirection = 'asc';
+    }
+
+    public function sortCouncillorsBy(string $field): void
+    {
+        if ($this->councillorSortBy === $field) {
+            $this->councillorSortDirection = $this->councillorSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->councillorSortBy = $field;
+            $this->councillorSortDirection = 'asc';
+        }
     }
 
     public function searchModernGov(string $gssCode): void

@@ -283,16 +283,56 @@
                         <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead>
                                 <tr class="bg-gray-50 dark:bg-gray-800">
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Name</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Party</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Ward</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Phone</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Source</th>
+                                    <th wire:click="sortCouncillorsBy('name')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Name
+                                        @if($councillorSortBy === 'name')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
+                                    <th wire:click="sortCouncillorsBy('party')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Party
+                                        @if($councillorSortBy === 'party')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
+                                    <th wire:click="sortCouncillorsBy('ward')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Ward
+                                        @if($councillorSortBy === 'ward')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
+                                    <th wire:click="sortCouncillorsBy('email')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Email
+                                        @if($councillorSortBy === 'email')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
+                                    <th wire:click="sortCouncillorsBy('phone')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Phone
+                                        @if($councillorSortBy === 'phone')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
+                                    <th wire:click="sortCouncillorsBy('source')" class="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Source
+                                        @if($councillorSortBy === 'source')
+                                            <flux:icon.chevron-{{ $councillorSortDirection === 'asc' ? 'up' : 'down' }} class="inline h-3 w-3" />
+                                        @endif
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
-                                @foreach($viewingCouncil->councillors->sortBy('name') as $councillor)
+                                @php
+                                    $sortedCouncillors = $viewingCouncil->councillors->sortBy(
+                                        fn($c) => match($councillorSortBy) {
+                                            'ward' => $c->ward_gss_code ?? '',
+                                            default => $c->{$councillorSortBy} ?? '',
+                                        },
+                                        SORT_REGULAR,
+                                        $councillorSortDirection === 'desc'
+                                    );
+                                @endphp
+                                @foreach($sortedCouncillors as $councillor)
                                     <tr wire:key="councillor-{{ $councillor->id }}">
                                         <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                                             <div class="flex items-center gap-3">
