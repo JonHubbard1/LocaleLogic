@@ -74,8 +74,10 @@ class CouncilDiscoveryService
 
     /**
      * Strategy 2: Scrape the council's website homepage for links to ModernGov.
-     * Most councils that use ModernGov link to it from their "Councillors" or
-     * "Democracy" page.
+     * Two-step approach:
+     *  1. Find links with text like "Councillors", "Democracy", "Committees"
+     *  2. Follow those links and verify if the target is ModernGov
+     * Also keeps the old URL-pattern matching as a fallback.
      */
     private function scrapeWebsiteForModernGov(string $websiteUrl): ?array
     {
@@ -91,26 +93,94 @@ class CouncilDiscoveryService
 
             $body = $response->body();
 
-            // Look for ModernGov links in the HTML
-            $patterns = [
-                // Direct modgov/moderngov links
-                '/href=["\'](https?:\/\/[^"\']*modgov[^"\']*)["\']/i',
-                '/href=["\'](https?:\/\/[^"\']*moderngov[^"\']*)["\']/i',
-                // mgMemberIndex / mgWebService
-                '/href=["\'](https?:\/\/[^"\']*mgMemberIndex[^"\']*)["\']/i',
-                '/href=["\'](https?:\/\/[^"\']*mgWebService[^"\']*)["\']/i',
-                // Democracy pages that might redirect to ModernGov
-                '/href=["\'](https?:\/\/[^"\']*democracy[^"\']*councillor[^"\']*)["\']/i',
-                '/href=["\'](https?:\/\/[^"\']*councillor[^"\']*democracy[^"\']*)["\']/i',
+            // Step 1: Look for links by text content and follow them
+            $linkTexts = [
+                'your councillors',
+                'councillors',
+                'council',
+                'democracy',
+                'committees',
+                'meetings',
+                'decision making',
+                'decisions',
+                'council meetings',
+                'council business',
+                'governance',
             ];
 
-            foreach ($patterns as $pattern) {
+            $dom = new \DOMDocument;
+            @$dom->loadHTML($body);
+
+            /** @var \DOMElement $link */
+            foreach ($dom->getElementsByTagName('a') as $link) {
+                $text = strtolower(trim($link->textContent));
+
+                foreach ($linkTexts as $search) {
+                    if (str_contains($text, $search)) {
+                        $href = $link->getAttribute('href');
+                        if (empty($href) || str_starts_with($href, '#') || str_starts_with($href, 'javascript:')) {
+                            continue;
+                        }
+
+                        // Resolve relative URLs
+                        $resolved = $this->resolveUrl($websiteUrl, $href);
+                        if (! $resolved) {
+                            continue;
+                        }
+
+                        // Quick follow — check if the linked page is ModernGov
+                        $baseUrl = $this->extractBaseUrl($resolved);
+                        if ($baseUrl && $this->verifyModernGovUrl($baseUrl)) {
+                            Log::info('ModernGov discovered via website link follow', [
+                                'council' => parse_url($websiteUrl, PHP_URL_HOST),
+                                'link_text' => $text,
+                                'url' => $baseUrl,
+                            ]);
+
+                            return [
+                                'uses_modern_gov' => true,
+                                'modern_gov_base_url' => $baseUrl,
+                                'democracy_url' => $baseUrl . '/mgMemberIndex.aspx',
+                            ];
+                        }
+
+                        // If the link itself doesn't verify, try the homepage
+                        // of the linked domain (in case it redirected)
+                        $parsed = parse_url($resolved);
+                        if (isset($parsed['scheme'], $parsed['host'])) {
+                            $linkedHome = $parsed['scheme'] . '://' . $parsed['host'];
+                            if ($linkedHome !== rtrim($websiteUrl, '/') && $this->verifyModernGovUrl($linkedHome)) {
+                                Log::info('ModernGov discovered via linked domain homepage', [
+                                    'council' => parse_url($websiteUrl, PHP_URL_HOST),
+                                    'link_text' => $text,
+                                    'url' => $linkedHome,
+                                ]);
+
+                                return [
+                                    'uses_modern_gov' => true,
+                                    'modern_gov_base_url' => $linkedHome,
+                                    'democracy_url' => $linkedHome . '/mgMemberIndex.aspx',
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback: look for direct URL patterns in the raw HTML
+            $urlPatterns = [
+                '/href=["\'](https?:\/\/[^"\']*modgov[^"\']*)["\']/i',
+                '/href=["\'](https?:\/\/[^"\']*moderngov[^"\']*)["\']/i',
+                '/href=["\'](https?:\/\/[^"\']*mgMemberIndex[^"\']*)["\']/i',
+                '/href=["\'](https?:\/\/[^"\']*mgWebService[^"\']*)["\']/i',
+            ];
+
+            foreach ($urlPatterns as $pattern) {
                 if (preg_match($pattern, $body, $matches)) {
-                    $candidateUrl = $matches[1];
-                    $baseUrl = $this->extractBaseUrl($candidateUrl);
+                    $baseUrl = $this->extractBaseUrl($matches[1]);
 
                     if ($baseUrl && $this->verifyModernGovUrl($baseUrl)) {
-                        Log::info('ModernGov discovered via website scrape', [
+                        Log::info('ModernGov discovered via URL pattern in HTML', [
                             'council' => parse_url($websiteUrl, PHP_URL_HOST),
                             'url' => $baseUrl,
                         ]);
@@ -246,6 +316,30 @@ class CouncilDiscoveryService
         }
 
         return false;
+    }
+
+    /**
+     * Resolve a (possibly relative) URL against a base URL.
+     */
+    private function resolveUrl(string $baseUrl, string $href): ?string
+    {
+        if (str_starts_with($href, 'http://') || str_starts_with($href, 'https://')) {
+            return $href;
+        }
+
+        $baseParsed = parse_url(rtrim($baseUrl, '/'));
+        if (! isset($baseParsed['scheme'], $baseParsed['host'])) {
+            return null;
+        }
+
+        if (str_starts_with($href, '/')) {
+            return $baseParsed['scheme'] . '://' . $baseParsed['host'] . $href;
+        }
+
+        $path = $baseParsed['path'] ?? '';
+        $dir = $path ? dirname($path) : '';
+
+        return $baseParsed['scheme'] . '://' . $baseParsed['host'] . $dir . '/' . $href;
     }
 
     /**
