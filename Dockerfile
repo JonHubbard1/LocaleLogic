@@ -86,17 +86,24 @@ RUN cat > /app/start.sh << 'STARTSH'
 #!/bin/bash
 cd /app
 
-# Run migrations if needed
-php artisan migrate --force 2>/dev/null || true
+if [ "${ROLE:-web}" = "worker" ]; then
+    # Run the queue worker and scheduler loops
+    while true; do php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600; done &
+    while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done &
+    wait
+else
+    # Run migrations if needed
+    php artisan migrate --force 2>/dev/null || true
 
-# Clear and cache config
-php artisan config:cache 2>/dev/null || true
-php artisan route:cache 2>/dev/null || true
-php artisan view:cache 2>/dev/null || true
+    # Clear and cache config
+    php artisan config:cache 2>/dev/null || true
+    php artisan route:cache 2>/dev/null || true
+    php artisan view:cache 2>/dev/null || true
 
-# Start PHP-FPM and Nginx
-php-fpm -D
-nginx -g "daemon off;"
+    # Start PHP-FPM and Nginx
+    php-fpm -D
+    nginx -g "daemon off;"
+fi
 STARTSH
 RUN chmod +x /app/start.sh
 
