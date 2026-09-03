@@ -57,7 +57,7 @@ jobs:
 
       - name: Deploy to staging via SSH
         env:
-          STAGING_HOST: 158.220.94.35
+          STAGING_HOST: 100.78.30.57
           STAGING_PATH: /home/ploi/localelogic.makeapp.uk
         run: |
           set -euo pipefail
@@ -110,7 +110,7 @@ jobs:
 
       - name: Deploy to production via SSH
         env:
-          PRODUCTION_HOST: 94.72.111.67
+          PRODUCTION_HOST: 100.117.185.79
           PRODUCTION_PATH: /home/ploi/localelogic.uk
         run: |
           set -euo pipefail
