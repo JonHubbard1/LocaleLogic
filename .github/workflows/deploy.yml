@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-deploy-${ github.ref }
+  group: ci-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
         env:
-          COMPOSER_AUTH: ${ secrets.COMPOSER_AUTH }
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
 
       - name: Install Node dependencies
         run: npm ci --no-audit --no-fund
@@ -46,14 +46,14 @@ jobs:
     runs-on: [self-hosted, linux, proxmox]
     environment:
       name: staging
-      url: ${ vars.STAGING_URL }
+      url: ${{ vars.STAGING_URL }}
 
     steps:
       - name: Add SSH private key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${ secrets.SSH_PRIVATE_KEY }
-          ssh-auth-sock: ${ runner.temp }/ssh_agent_staging.sock
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-auth-sock: ${{ runner.temp }}/ssh_agent_staging.sock
 
       - name: Deploy to staging via SSH
         env:
@@ -65,24 +65,24 @@ jobs:
 
       - name: Wait for staging to become ready
         env:
-          SMOKE_URL: ${ vars.STAGING_URL }
+          SMOKE_URL: ${{ vars.STAGING_URL }}
           TIMEOUT: 300
         run: |
           set -euo pipefail
           echo "Polling $SMOKE_URL for up to $TIMEOUT s..."
           for i in $(seq 1 "$TIMEOUT"); do
             if curl -fsS --max-time 10 "$SMOKE_URL" >/dev/null 2>&1; then
-              echo "Staging ready after ${ i }s"
+              echo "Staging ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "Staging did not become ready within ${ TIMEOUT }s" >&2
+          echo "Staging did not become ready within ${TIMEOUT}s" >&2
           exit 1
 
       - name: Staging smoke test
         env:
-          SMOKE_URL: ${ vars.STAGING_URL }
+          SMOKE_URL: ${{ vars.STAGING_URL }}
         run: |
           set -euo pipefail
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$SMOKE_URL")
@@ -99,14 +99,14 @@ jobs:
     runs-on: [self-hosted, linux, proxmox]
     environment:
       name: production
-      url: ${ vars.PRODUCTION_URL }
+      url: ${{ vars.PRODUCTION_URL }}
 
     steps:
       - name: Add SSH private key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${ secrets.SSH_PRIVATE_KEY }
-          ssh-auth-sock: ${ runner.temp }/ssh_agent_production.sock
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-auth-sock: ${{ runner.temp }}/ssh_agent_production.sock
 
       - name: Deploy to production via SSH
         env:
@@ -118,24 +118,24 @@ jobs:
 
       - name: Wait for production to become ready
         env:
-          SMOKE_URL: ${ vars.PRODUCTION_URL }
+          SMOKE_URL: ${{ vars.PRODUCTION_URL }}
           TIMEOUT: 300
         run: |
           set -euo pipefail
           echo "Polling $SMOKE_URL for up to $TIMEOUT s..."
           for i in $(seq 1 "$TIMEOUT"); do
             if curl -fsS --max-time 10 "$SMOKE_URL" >/dev/null 2>&1; then
-              echo "Production ready after ${ i }s"
+              echo "Production ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "Production did not become ready within ${ TIMEOUT }s" >&2
+          echo "Production did not become ready within ${TIMEOUT}s" >&2
           exit 1
 
       - name: Production smoke test
         env:
-          SMOKE_URL: ${ vars.PRODUCTION_URL }
+          SMOKE_URL: ${{ vars.PRODUCTION_URL }}
         run: |
           set -euo pipefail
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$SMOKE_URL")
