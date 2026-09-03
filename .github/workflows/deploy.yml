@@ -49,15 +49,19 @@ jobs:
       url: ${ vars.STAGING_URL }
 
     steps:
-      - name: Trigger Ploi staging deploy
+      - name: Add SSH private key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${ secrets.SSH_PRIVATE_KEY }
+          ssh-auth-sock: ${ runner.temp }/ssh_agent_staging.sock
+
+      - name: Deploy to staging via SSH
+        env:
+          STAGING_HOST: 158.220.94.35
+          STAGING_PATH: /home/ploi/localelogic.makeapp.uk
         run: |
           set -euo pipefail
-          if [[ -z "${ secrets.PLOI_STAGING_WEBHOOK }" ]]; then
-            echo "PLOI_STAGING_WEBHOOK secret is not configured." >&2
-            exit 1
-          fi
-          curl -sf -X POST "${ secrets.PLOI_STAGING_WEBHOOK }"             -H "Content-Type: application/json"             -d "{"ref":"${ github.ref }","sha":"${ github.sha }"}"
-          echo "Staging deploy triggered."
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 ploi@$STAGING_HOST "cd $STAGING_PATH && bash .ploi/deploy.sh"
 
       - name: Wait for staging to become ready
         env:
@@ -98,15 +102,19 @@ jobs:
       url: ${ vars.PRODUCTION_URL }
 
     steps:
-      - name: Trigger Ploi production deploy
+      - name: Add SSH private key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${ secrets.SSH_PRIVATE_KEY }
+          ssh-auth-sock: ${ runner.temp }/ssh_agent_production.sock
+
+      - name: Deploy to production via SSH
+        env:
+          PRODUCTION_HOST: 94.72.111.67
+          PRODUCTION_PATH: /home/ploi/localelogic.uk
         run: |
           set -euo pipefail
-          if [[ -z "${ secrets.PLOI_PRODUCTION_WEBHOOK }" ]]; then
-            echo "PLOI_PRODUCTION_WEBHOOK secret is not configured." >&2
-            exit 1
-          fi
-          curl -sf -X POST "${ secrets.PLOI_PRODUCTION_WEBHOOK }"             -H "Content-Type: application/json"             -d "{"ref":"${ github.ref }","sha":"${ github.sha }"}"
-          echo "Production deploy triggered."
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 ploi@$PRODUCTION_HOST "cd $PRODUCTION_PATH && bash .ploi/deploy.sh"
 
       - name: Wait for production to become ready
         env:
